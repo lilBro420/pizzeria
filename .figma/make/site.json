@@ -1,0 +1,10 @@
+{
+  "description": "Streamlines pizzeria sales with a POS system for employees and admin, managing orders, payments, snacks, and drinks efficiently.",
+  "robots": {
+    "index": false
+  },
+  "accessibility": {
+    "addBypassLinks": false,
+    "ignoreReducedMotion": false
+  }
+}
