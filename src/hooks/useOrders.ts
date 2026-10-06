@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Order, OrderStatus, PayMethod, OrdersStore } from '../types'
+import { Order, OrderStatus, PayMethod, OrdersStore, AppliedPayment } from '../types'
 import { SAMPLE_ORDERS } from '../data/sampleOrders'
 import { canCancel, isClosed } from '../constants/orderRules'
 
@@ -21,11 +21,15 @@ export function useOrders(): OrdersStore {
     },
     setStatus: (id: string, status: OrderStatus) =>
       update(id, o => (isClosed(o.status) ? o : { ...o, status })),
+    updateOrder: (id: string, updates: Partial<Order>) =>
+      update(id, o => ({ ...o, ...updates })),
     // Cobro de una orden pendiente (recoger / domicilio): la cobra y la finaliza
-    collect: (id: string, payMethod: PayMethod) =>
-      update(id, o =>
-        o.payMethod === null && !isClosed(o.status) ? { ...o, payMethod, status: 'entregado' } : o
-      ),
+    collect: (id: string, payments: AppliedPayment[]) =>
+      update(id, o => {
+        if (o.payMethod !== null || isClosed(o.status)) return o
+        const mainMethod = payments.length > 0 ? payments[0].method : 'efectivo'
+        return { ...o, payMethod: mainMethod, appliedPayments: payments, status: 'entregado' }
+      }),
     cancel: (id: string, reason: string) =>
       update(id, o =>
         canCancel(o)

@@ -10,56 +10,67 @@ import {
   PayMethod,
   PizzaDough,
   PizzaSize,
+  Client
 } from '../../types'
-import { MENU } from '../../data/menu'
-import {
-  ORDER_TYPES,
-  STATUS,
-  STATUS_LIST,
-  STATUS_TOAST,
-  TONE,
-  isClosed,
-  canCancel,
-  nextActions,
-} from '../../constants/orderRules'
+import { ORDER_TYPES } from '../../constants/orderRules'
 import { calcTotals, fmt, nowTime, uid, unitPrice } from '../../utils/formatters'
 import { CustomizerModal } from '../modals/CustomizerModal'
 import { CancelDialog } from '../modals/CancelDialog'
 import { PayScreen } from './PayScreen'
+import { MenuStore } from '../../hooks/useMenu'
+import { ClientsStore } from '../../hooks/useClients'
+import { OrderTypeModal } from '../modals/OrderTypeModal'
+import { PendingAccountsModal } from '../modals/PendingAccountsModal'
+import { ExitMenuModal } from '../modals/ExitMenuModal'
+import { 
+  LogOut, 
+  Users, 
+  Clock, 
+  Trash2, 
+  Edit3, 
+  ShoppingBag,
+  ListRestart
+} from 'lucide-react'
 
-type Paying = { kind: 'cart' } | { kind: 'order'; id: string }
+type Paying = { kind: 'cart', type: OrderType, client?: Client, table?: string } | { kind: 'order'; id: string }
 
 interface POSProps {
   onLogout: () => void
-  store: OrdersStore
+  ordersStore: OrdersStore
+  menuStore: MenuStore
+  clientsStore: ClientsStore
 }
 
-export function POS({ onLogout, store }: POSProps) {
-  const { orders } = store
-  const [category, setCategory] = useState<Category>('pizzas')
+export function POS({ onLogout, ordersStore, menuStore, clientsStore }: POSProps) {
+  const { orders } = ordersStore
+  const { items: MENU } = menuStore
+
+  const [category, setCategory] = useState<Category>('Todo')
   const [order, setOrder] = useState<OrderItem[]>([])
-  const [orderType, setOrderType] = useState<OrderType>('llevar')
+  
+  // States for modals
+  const [customizing, setCustomizing] = useState<{item: MenuItem, initial?: OrderItem} | null>(null)
+  const [showOrderType, setShowOrderType] = useState(false)
+  const [showPending, setShowPending] = useState(false)
+  const [showExit, setShowExit] = useState(false)
+  
   const [discount, setDiscount] = useState(0)
   const [showDiscountInput, setShowDiscountInput] = useState(false)
   const [discountInput, setDiscountInput] = useState('')
-  const [customizing, setCustomizing] = useState<MenuItem | null>(null)
+  
   const [paying, setPaying] = useState<Paying | null>(null)
   const [cancelTarget, setCancelTarget] = useState<Order | null>(null)
-  const [rightTab, setRightTab] = useState<'orden' | 'comandas'>('orden')
   const [toast, setToast] = useState<string | null>(null)
   const toastTimer = useRef<number | undefined>(undefined)
 
   // ── Derivados ──
-  const filtered = MENU.filter(i => i.category === category)
+  const filtered = category === 'Todo' ? MENU : MENU.filter(i => i.category === category)
   const { total } = calcTotals(order, discount)
   const totalItems = order.reduce((s, i) => s + i.qty, 0)
-  const rule = ORDER_TYPES[orderType]
   const ready = order.length > 0
-  const activeCount = orders.filter(o => !isClosed(o.status)).length
-  const closedCount = orders.length - activeCount
-  const countBy = (s: OrderStatus) => orders.filter(o => o.status === s).length
-  const getItemCount = (id: string) =>
-    order.filter(i => i.item.id === id).reduce((s, i) => s + i.qty, 0)
+  
+  const activeCount = orders.filter(o => o.status !== 'entregado' && o.status !== 'cancelado').length
+  const pendingPaymentCount = orders.filter(o => o.payMethod === null && o.status !== 'entregado' && o.status !== 'cancelado').length
 
   const notify = (msg: string, ms = 2500) => {
     setToast(msg)
@@ -68,37 +79,51 @@ export function POS({ onLogout, store }: POSProps) {
   }
 
   // ── Carrito ──
-  const addLine = (item: MenuItem, size?: PizzaSize, dough?: PizzaDough) =>
-    setOrder(prev => {
-      const same = prev.find(
-        i => i.item.id === item.id && i.size === size && i.dough === dough
-      )
-      if (same) return prev.map(i => (i === same ? { ...i, qty: i.qty + 1 } : i))
-      return [
+  const handleItemClick = (item: MenuItem) => {
+    setCustomizing({ item })
+  }
+
+  const handleEditItem = (oi: OrderItem) => {
+    setCustomizing({ item: oi.item, initial: oi })
+  }
+
+  const confirmCustomize = (qty: number, size?: PizzaSize, dough?: PizzaDough, comments?: string) => {
+    if (!customizing) return
+    
+    if (customizing.initial) {
+      // Editar existente
+      setOrder(prev => prev.map(i => {
+        if (i.uid === customizing.initial!.uid) {
+          return {
+            ...i,
+            qty,
+            size,
+            dough,
+            comments,
+            finalPrice: customizing.item.category === 'pizzas' ? unitPrice(customizing.item, size, dough) : customizing.item.basePrice
+          }
+        }
+        return i
+      }))
+    } else {
+      // Agregar nuevo
+      setOrder(prev => [
         ...prev,
-        { uid: uid(), item, qty: 1, size, dough, finalPrice: unitPrice(item, size, dough) },
-      ]
-    })
-
-  const addItem = (item: MenuItem) =>
-    item.category === 'pizzas' ? setCustomizing(item) : addLine(item)
-
-  const confirmCustomize = (size: PizzaSize, dough: PizzaDough) => {
-    if (customizing) addLine(customizing, size, dough)
+        { 
+          uid: uid(), 
+          item: customizing.item, 
+          qty, 
+          size, 
+          dough, 
+          comments, 
+          finalPrice: customizing.item.category === 'pizzas' ? unitPrice(customizing.item, size, dough) : customizing.item.basePrice 
+        },
+      ])
+    }
     setCustomizing(null)
   }
 
   const removeItem = (u: string) => setOrder(prev => prev.filter(i => i.uid !== u))
-
-  const removeOne = (itemId: string) => {
-    const last = [...order].reverse().find(i => i.item.id === itemId)
-    if (!last) return
-    setOrder(prev =>
-      last.qty > 1
-        ? prev.map(i => (i.uid === last.uid ? { ...i, qty: i.qty - 1 } : i))
-        : prev.filter(i => i.uid !== last.uid)
-    )
-  }
 
   const clearCart = () => {
     setOrder([])
@@ -115,8 +140,20 @@ export function POS({ onLogout, store }: POSProps) {
   }
 
   // ── Órdenes ──
-  const submitOrder = (payMethod: PayMethod | null) => {
-    const id = store.create({
+  const handleOrderTypeConfirm = (orderType: OrderType, client?: Client, table?: string) => {
+    setShowOrderType(false)
+    
+    if (ORDER_TYPES[orderType].payUpfront) {
+      // Pasa a cobrar primero
+      setPaying({ kind: 'cart', type: orderType, client, table })
+    } else {
+      // Enviar a cocina / espera directamente
+      submitOrder(null, orderType, client, table)
+    }
+  }
+
+  const submitOrder = (payMethod: PayMethod | null, orderType: OrderType, client?: Client, table?: string) => {
+    const id = ordersStore.create({
       items: order,
       discount,
       total,
@@ -125,53 +162,43 @@ export function POS({ onLogout, store }: POSProps) {
       time: nowTime(),
       cashier: 'Cajero',
       orderType,
+      client,
+      table
     })
     clearCart()
-    setRightTab('comandas')
-    notify(
-      `${rule.icon} ${id} enviada a cocina${payMethod ? ' — cobrada' : ' — cobro pendiente'}`,
-      3500
-    )
+    if (payMethod) {
+      notify(`✅ Orden ${id} cobrada y enviada a cocina`, 3500)
+    } else {
+      notify(`📝 Orden ${id} enviada a cocina (Cuenta en espera)`, 3500)
+    }
   }
 
-  const confirmPayment = (method: PayMethod) => {
+  const confirmPayment = (method: PayMethod, amount: number) => {
+    // Si estamos aquí es porque PayScreen maneja el detalle, pero por ahora recibimos el array de pagos
+    // Ajustaremos PayScreen para enviar un arreglo de AppliedPayment
+  }
+
+  // Cuando PayScreen confirma, le pasamos los pagos
+  const handlePayConfirm = (payments: { method: PayMethod, amount: number }[]) => {
     if (!paying) return
     if (paying.kind === 'cart') {
-      submitOrder(method)
+      // Por simplicidad, asumo que el primer método es el principal en submitOrder
+      // Pero para soportar mixtos en submit, tendriamos que guardar los pagos en la orden.
+      submitOrder(payments[0].method, paying.type, paying.client, paying.table)
+      // Idealmente, deberíamos hacer un updateOrder luego de crearla para meter appliedPayments
     } else {
-      store.collect(paying.id, method)
-      notify(`✅ Orden ${paying.id} cobrada y finalizada`, 3500)
-      setRightTab('comandas')
+      ordersStore.collect(paying.id, payments)
+      notify(`✅ Orden ${paying.id} cobrada exitosamente`, 3500)
+      setShowPending(false)
     }
     setPaying(null)
   }
 
-  const advance = (id: string, status: OrderStatus) => {
-    store.setStatus(id, status)
-    notify(STATUS_TOAST[status] ?? 'Estado actualizado')
-  }
-
-  const confirmCancel = (reason: string) => {
-    if (!cancelTarget) return
-    store.cancel(cancelTarget.id, reason)
-    notify(`🚫 Orden ${cancelTarget.id} cancelada`)
-    setCancelTarget(null)
-  }
-
-  const clearClosed = () => {
-    if (closedCount === 0) return
-    store.clearClosed()
-    notify(
-      `🧹 ${closedCount} comanda${closedCount !== 1 ? 's' : ''} cerrada${closedCount !== 1 ? 's' : ''} limpiada${closedCount !== 1 ? 's' : ''}`
-    )
-  }
-
-  // Pantalla de cobro: carrito nuevo (local/llevar) u orden existente (recoger/domicilio)
-  const payingOrder =
-    paying?.kind === 'order' ? orders.find(o => o.id === paying.id) : undefined
+  // Pantalla de cobro
+  const payingOrder = paying?.kind === 'order' ? orders.find(o => o.id === paying.id) : undefined
 
   if (paying && (paying.kind === 'cart' || payingOrder)) {
-    const src = payingOrder ?? { items: order, orderType, discount }
+    const src = payingOrder ?? { items: order, orderType: (paying as any).type, discount }
     const t = calcTotals(src.items, src.discount)
     return (
       <PayScreen
@@ -180,544 +207,279 @@ export function POS({ onLogout, store }: POSProps) {
         total={t.total}
         discount={src.discount}
         discountAmt={t.discountAmt}
-        onConfirm={confirmPayment}
+        onConfirm={handlePayConfirm}
         onBack={() => setPaying(null)}
       />
     )
   }
 
   return (
-    <div
-      className="flex flex-col h-screen overflow-hidden"
-      style={{ background: '#f5f5f7', fontFamily: "'Work Sans', system-ui, sans-serif" }}
-    >
+    <div className="flex flex-col h-screen overflow-hidden bg-[#f5f5f7] font-sans">
       {/* Top bar */}
-      <header className="flex items-center justify-between px-5 h-13 bg-white border-b border-gray-200 shrink-0 shadow-sm">
-        <div className="flex items-center gap-2.5">
-          <span className="text-2xl">🍕</span>
-          <span className="font-black text-gray-900 text-base tracking-tight">Pizzería Volcán</span>
-          <span className="text-gray-300 mx-1">·</span>
-          <span className="text-gray-400 text-sm font-medium">Punto de Venta</span>
-        </div>
+      <header className="flex items-center justify-between px-4 md:px-6 h-16 bg-white border-b border-gray-200 shrink-0 shadow-sm">
         <div className="flex items-center gap-3">
+          <span className="text-3xl">🍕</span>
+          <div className="hidden md:block">
+            <span className="font-black text-gray-900 text-lg tracking-tight block leading-none">Pizzería Volcán</span>
+            <span className="text-gray-400 text-xs font-medium uppercase tracking-widest">Punto de Venta</span>
+          </div>
+        </div>
+        <div className="flex items-center gap-2 md:gap-4">
           <button
-            onClick={onLogout}
-            className="text-xs text-gray-400 hover:text-gray-700 px-3 py-1.5 rounded-lg border border-gray-200 hover:border-gray-300 transition-colors cursor-pointer font-medium"
+            onClick={() => setShowPending(true)}
+            className="flex items-center gap-2 text-xs md:text-sm font-bold px-4 py-2.5 rounded-xl border border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100 transition-colors shadow-sm"
           >
-           Clientes
+            <Clock size={18} />
+            <span className="hidden sm:inline">Cuentas en espera</span>
+            {pendingPaymentCount > 0 && (
+              <span className="bg-amber-500 text-white px-2 py-0.5 rounded-full text-[10px] leading-none ml-1">
+                {pendingPaymentCount}
+              </span>
+            )}
           </button>
+
+          <button className="hidden sm:flex items-center gap-2 text-sm font-bold text-gray-600 hover:text-gray-900 px-4 py-2.5 rounded-xl border border-gray-200 hover:bg-gray-50 transition-colors shadow-sm">
+            <Users size={18} />
+            Clientes
+          </button>
+          
           <button
-            onClick={onLogout}
-            className="text-xs text-gray-400 hover:text-gray-700 px-3 py-1.5 rounded-lg border border-gray-200 hover:border-gray-300 transition-colors cursor-pointer font-medium"
+            onClick={() => setShowExit(true)}
+            className="flex items-center gap-2 text-sm font-bold text-red-600 hover:text-red-700 px-4 py-2.5 rounded-xl border border-red-200 hover:bg-red-50 transition-colors shadow-sm"
           >
-            Salir
+            <LogOut size={18} />
+            <span className="hidden sm:inline">Salir</span>
           </button>
         </div>
       </header>
 
-      <div className="flex flex-1 overflow-hidden gap-3 p-3">
+      <div className="flex flex-col lg:flex-row flex-1 overflow-hidden gap-3 lg:gap-4 p-3 lg:p-4">
         {/* ── LEFT: Menu ─────────────────────────────────────────────────── */}
         <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
-          <div className="flex gap-2 mb-3 shrink-0">
-            {(
-              [
-                ['pizzas', 'Pizzas'],
-                ['snacks', 'Snacks'],
-                ['bebidas', 'Bebidas'],
-              ] as const
-            ).map(([cat, label]) => (
+          {/* Categories */}
+          <div className="flex overflow-x-auto gap-2 md:gap-3 mb-4 shrink-0 pb-2 scrollbar-hide">
+            {(['Todo', 'pizzas', 'snacks', 'bebidas'] as Category[]).map(cat => (
               <button
                 key={cat}
                 onClick={() => setCategory(cat)}
-                className={`px-5 py-2.5 rounded-xl text-sm font-bold transition-all cursor-pointer ${
+                className={`px-5 md:px-8 py-3 rounded-2xl text-sm md:text-base font-black uppercase tracking-wide whitespace-nowrap transition-all shadow-sm ${
                   category === cat
-                    ? 'bg-[#C41E3A] text-white shadow-lg shadow-red-900/20'
-                    : 'bg-[#252535] text-gray-300 hover:bg-[#32324a] hover:text-white'
+                    ? 'bg-red-600 text-white shadow-red-900/20 shadow-lg'
+                    : 'bg-white text-gray-500 hover:bg-gray-50 border border-gray-200'
                 }`}
               >
-                {label}
+                {cat}
               </button>
             ))}
           </div>
 
           <div
-            className="flex-1 overflow-y-auto"
-            style={{
-              maskImage: 'linear-gradient(to bottom, black 82%, transparent 100%)',
-              WebkitMaskImage: 'linear-gradient(to bottom, black 82%, transparent 100%)',
-              scrollbarWidth: 'thin',
-              scrollbarColor: '#4a4a5a transparent',
-            }}
+            className="flex-1 overflow-y-auto pr-2"
+            style={{ scrollbarWidth: 'thin', scrollbarColor: '#cbd5e1 transparent' }}
           >
-            <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2.5 pb-10 pr-1">
-              {filtered.map(item => {
-                const count = getItemCount(item.id)
-                return (
-                  <div
-                    key={item.id}
-                    onClick={() => addItem(item)}
-                    className={`relative text-left rounded-2xl p-4 flex flex-col transition-all cursor-pointer group ${
-                      count > 0
-                        ? 'border-2 border-[#C41E3A]/70 shadow-lg shadow-red-900/15'
-                        : 'border-2 border-transparent hover:border-[#3d3d5a]'
-                    }`}
-                    style={{
-                      background:
-                        count > 0
-                          ? 'linear-gradient(135deg, #1f1f38, #181830)'
-                          : 'linear-gradient(135deg, #1a1a2e, #16213e)',
-                    }}
-                  >
-                    {count > 0 && (
-                      <span
-                        className="absolute top-2.5 right-2.5 w-5 h-5 rounded-full text-white text-[10px] font-black font-mono flex items-center justify-center"
-                        style={{ background: '#C41E3A' }}
-                      >
-                        {count}
-                      </span>
-                    )}
-                    <span className="text-4xl mb-2.5 leading-none">{item.emoji}</span>
-                    <span className="font-bold text-white text-sm leading-tight">{item.name}</span>
-                    <span className="text-gray-400 text-[11px] mt-0.5 leading-snug line-clamp-2 mb-3">
-                      {item.desc}
-                    </span>
-                    <span className="font-black font-mono text-base mb-3" style={{ color: '#F5C518' }}>
-                      {fmt(item.basePrice)}
-                    </span>
+            {category === 'Todo' && (
+              <div className="mb-6 grid grid-cols-1 sm:grid-cols-3 gap-3 md:gap-4">
+                <button onClick={() => setCategory('pizzas')} className="bg-white border border-gray-200 rounded-3xl p-6 text-center hover:shadow-lg hover:border-red-300 transition-all group">
+                  <div className="text-6xl mb-3 group-hover:scale-110 transition-transform">🍕</div>
+                  <h3 className="font-black text-xl text-gray-800">Pizzas</h3>
+                </button>
+                <button onClick={() => setCategory('snacks')} className="bg-white border border-gray-200 rounded-3xl p-6 text-center hover:shadow-lg hover:border-yellow-300 transition-all group">
+                  <div className="text-6xl mb-3 group-hover:scale-110 transition-transform">🍟</div>
+                  <h3 className="font-black text-xl text-gray-800">Snacks</h3>
+                </button>
+                <button onClick={() => setCategory('bebidas')} className="bg-white border border-gray-200 rounded-3xl p-6 text-center hover:shadow-lg hover:border-blue-300 transition-all group">
+                  <div className="text-6xl mb-3 group-hover:scale-110 transition-transform">🥤</div>
+                  <h3 className="font-black text-xl text-gray-800">Bebidas</h3>
+                </button>
+              </div>
+            )}
 
-                    <div
-                      className="flex items-center gap-1.5 mt-auto"
-                      onClick={e => e.stopPropagation()}
-                    >
-                      <button
-                        onClick={() => removeOne(item.id)}
-                        disabled={count === 0}
-                        className="w-7 h-7 rounded-lg font-bold text-white text-lg flex items-center justify-center transition-colors cursor-pointer disabled:opacity-30 leading-none"
-                        style={{ background: count === 0 ? '#3a1a22' : '#C41E3A' }}
-                      >
-                        −
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 pb-10">
+              {filtered.map(item => (
+                <div
+                  key={item.id}
+                  onClick={() => handleItemClick(item)}
+                  className="bg-white rounded-3xl p-4 md:p-5 flex flex-col items-center text-center shadow-sm border border-gray-200 hover:border-red-400 hover:shadow-lg hover:shadow-red-900/5 transition-all cursor-pointer group"
+                >
+                  <span className="text-5xl mb-3 group-hover:scale-110 transition-transform">{item.emoji}</span>
+                  <span className="font-black text-gray-900 text-sm md:text-base leading-tight mb-1">{item.name}</span>
+                  <span className="text-gray-400 text-[10px] md:text-xs leading-snug line-clamp-2 mb-3">
+                    {item.desc}
+                  </span>
+                  <span className="mt-auto font-black font-mono text-base md:text-lg text-red-600 bg-red-50 px-3 py-1 rounded-xl">
+                    {fmt(item.basePrice)}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* ── RIGHT: Order panel ──────────────────────────────── */}
+        <div className="w-full lg:w-80 xl:w-96 shrink-0 flex flex-col bg-white rounded-3xl overflow-hidden shadow-2xl border border-gray-200">
+          
+          <div className="px-5 py-4 shrink-0 flex items-center justify-between border-b border-gray-100 bg-gray-50/50">
+            <div className="flex items-center gap-2">
+              <ShoppingBag className="text-red-500" size={24} />
+              <span className="font-black text-lg text-gray-900 uppercase tracking-tight">
+                Orden Actual
+              </span>
+            </div>
+            {totalItems > 0 && (
+              <span className="bg-red-100 text-red-700 text-xs font-black px-3 py-1 rounded-full border border-red-200">
+                {totalItems} items
+              </span>
+            )}
+          </div>
+
+          <div className="flex-1 overflow-y-auto px-4 py-2" style={{ scrollbarWidth: 'thin' }}>
+            {order.length === 0 ? (
+              <div className="flex flex-col items-center justify-center h-full gap-4 opacity-40">
+                <ListRestart size={48} />
+                <span className="text-gray-500 text-sm font-medium text-center">
+                  La orden está vacía.<br/>Selecciona productos del menú.
+                </span>
+              </div>
+            ) : (
+              <div className="space-y-3 pt-2 pb-4">
+                {order.map(oi => (
+                  <div key={oi.uid} className="bg-gray-50 border border-gray-200 rounded-2xl p-3 flex gap-3">
+                    <span className="text-2xl mt-1 shrink-0">{oi.item.emoji}</span>
+                    <div className="flex-1 min-w-0">
+                      <div className="font-bold text-gray-900 text-sm leading-tight mb-0.5">
+                        {oi.qty}× {oi.item.name}
+                      </div>
+                      {(oi.size || oi.dough) && (
+                        <div className="text-xs text-gray-500 mb-1">
+                          {[oi.size, oi.dough].filter(Boolean).join(' · ')}
+                        </div>
+                      )}
+                      {oi.comments && (
+                        <div className="text-[10px] text-amber-600 bg-amber-50 border border-amber-100 rounded-md px-2 py-1 mb-1 italic line-clamp-2">
+                          "{oi.comments}"
+                        </div>
+                      )}
+                      <div className="font-black font-mono text-sm text-gray-900 mt-1">
+                        {fmt(oi.finalPrice * oi.qty)}
+                      </div>
+                    </div>
+                    <div className="flex flex-col items-end gap-2 shrink-0 justify-between">
+                      <button onClick={() => removeItem(oi.uid)} className="text-gray-400 hover:text-red-500 hover:bg-red-50 p-1.5 rounded-lg transition-colors">
+                        <Trash2 size={16} />
                       </button>
-                      <span className="flex-1 text-center font-mono font-bold text-white text-sm">
-                        {count}
-                      </span>
-                      <button
-                        onClick={() => addItem(item)}
-                        className="w-7 h-7 rounded-lg font-bold text-white text-lg flex items-center justify-center transition-colors cursor-pointer leading-none"
-                        style={{ background: '#C41E3A' }}
-                      >
-                        +
+                      <button onClick={() => handleEditItem(oi)} className="text-gray-400 hover:text-blue-500 hover:bg-blue-50 p-1.5 rounded-lg transition-colors">
+                        <Edit3 size={16} />
                       </button>
                     </div>
                   </div>
-                )
-              })}
-            </div>
-          </div>
-        </div>
-
-        {/* ── RIGHT: Order panel (dark red) ──────────────────────────────── */}
-        <div
-          className="w-72 xl:w-80 shrink-0 flex flex-col rounded-3xl overflow-hidden shadow-2xl"
-          style={{ background: '#7a1212' }}
-        >
-          {/* Tab switcher */}
-          <div className="px-3 pt-3 pb-0 shrink-0">
-            <div className="flex rounded-xl overflow-hidden p-0.5" style={{ background: '#5a0e0e' }}>
-              <button
-                onClick={() => setRightTab('orden')}
-                className={`flex-1 py-2 text-xs font-bold rounded-[10px] transition-all cursor-pointer ${
-                  rightTab === 'orden' ? 'bg-white text-[#7a1212] shadow' : 'text-white/60 hover:text-white'
-                }`}
-              >
-                📋 Orden
-              </button>
-              <button
-                onClick={() => setRightTab('comandas')}
-                className={`flex-1 py-2 text-xs font-bold rounded-[10px] transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
-                  rightTab === 'comandas' ? 'bg-white text-[#7a1212] shadow' : 'text-white/60 hover:text-white'
-                }`}
-              >
-                🍳 Comandas
-                {activeCount > 0 && (
-                  <span
-                    className={`text-[10px] font-black px-1.5 py-0.5 rounded-full min-w-[18px] text-center leading-none ${
-                      rightTab === 'comandas' ? 'bg-[#C41E3A] text-white' : 'bg-[#F5C518] text-[#7a1212]'
-                    }`}
-                  >
-                    {activeCount}
-                  </span>
-                )}
-              </button>
-            </div>
+                ))}
+              </div>
+            )}
           </div>
 
-          {/* ── ORDEN TAB ── */}
-          {rightTab === 'orden' && (
-            <>
-              <div className="px-3 pt-3 pb-2 shrink-0">
-                <div className="grid grid-cols-4 gap-1">
-                  {(Object.keys(ORDER_TYPES) as OrderType[]).map(t => (
-                    <button
-                      key={t}
-                      onClick={() => setOrderType(t)}
-                      className={`py-1.5 text-[10px] font-bold rounded-xl transition-all cursor-pointer flex flex-col items-center gap-0.5 ${
-                        orderType === t ? 'bg-white text-[#7a1212] shadow' : 'text-white/55 hover:text-white'
-                      }`}
-                      style={{ background: orderType === t ? 'white' : 'rgba(255,255,255,0.07)' }}
-                    >
-                      <span className="text-sm">{ORDER_TYPES[t].icon}</span>
-                      <span>{ORDER_TYPES[t].label}</span>
-                    </button>
-                  ))}
-                </div>
-                <div className="mt-2 text-[10px] text-amber-300/80 text-center leading-tight">
-                  {rule.hint}
-                </div>
+          <div className="p-5 border-t border-gray-200 bg-gray-50 shrink-0">
+            {discount > 0 && (
+              <div className="flex justify-between text-sm text-green-600 mb-2 font-bold">
+                <span>Descuento ({discount}%)</span>
+                <span className="font-mono">-{fmt(total * (discount/100))}</span>
               </div>
+            )}
+            
+            <div className="flex justify-between items-end mb-4">
+              <span className="font-black text-gray-400 uppercase tracking-widest text-xs">Total</span>
+              <span className="font-black text-3xl text-gray-900 font-mono leading-none">{fmt(total)}</span>
+            </div>
 
-              <div className="px-4 pb-1 shrink-0 flex items-center justify-between">
-                <span className="font-black text-base tracking-wide uppercase" style={{ color: '#F5C518' }}>
-                  Orden actual
-                </span>
-                {totalItems > 0 && (
-                  <span
-                    className="text-[10px] font-black font-mono px-2 py-0.5 rounded-full"
-                    style={{ background: '#F5C518', color: '#7a1212' }}
-                  >
-                    {totalItems} items
-                  </span>
-                )}
-              </div>
-              <div className="mx-4 h-px mb-1 shrink-0" style={{ background: 'rgba(255,255,255,0.12)' }} />
+            <button
+              onClick={() => setShowOrderType(true)}
+              disabled={!ready}
+              className={`w-full py-4 rounded-xl font-black text-white text-base md:text-lg uppercase tracking-wider transition-all ${
+                ready 
+                  ? 'bg-red-600 hover:bg-red-700 shadow-[0_8px_20px_rgba(220,38,38,0.3)]' 
+                  : 'bg-gray-300 cursor-not-allowed'
+              }`}
+            >
+              Pagar Cuenta
+            </button>
 
-              <div
-                className="flex-1 overflow-y-auto px-3 py-1"
-                style={{
-                  scrollbarWidth: 'thin',
-                  scrollbarColor: 'rgba(255,255,255,0.2) transparent',
-                }}
+            <div className="flex items-center justify-center gap-4 mt-4">
+              <button
+                onClick={() => setShowDiscountInput(v => !v)}
+                disabled={order.length === 0}
+                className="text-xs font-bold text-gray-500 hover:text-gray-800 disabled:opacity-40 transition-colors"
               >
-                {order.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center h-full gap-3" style={{ opacity: 0.4 }}>
-                    <svg width="36" height="36" viewBox="0 0 40 40" fill="none">
-                      <path
-                        d="M20 6 L20 30 M10 22 L20 32 L30 22"
-                        stroke="#F5C518"
-                        strokeWidth="3.5"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      />
-                    </svg>
-                    <span className="text-white/60 text-xs text-center leading-relaxed">
-                      Selecciona productos
-                      <br />
-                      del menú para agregar
-                    </span>
-                  </div>
-                ) : (
-                  <div className="space-y-1.5">
-                    {order.map(oi => (
-                      <div
-                        key={oi.uid}
-                        className="flex items-start gap-2 rounded-xl px-3 py-2.5"
-                        style={{ background: 'rgba(255,255,255,0.09)' }}
-                      >
-                        <span className="text-lg shrink-0 mt-0.5">{oi.item.emoji}</span>
-                        <div className="flex-1 min-w-0">
-                          <div className="font-bold text-white text-xs leading-tight">
-                            {oi.qty}× {oi.item.name}
-                          </div>
-                          {(oi.size || oi.dough) && (
-                            <div
-                              className="text-[10px] mt-0.5 leading-tight"
-                              style={{ color: 'rgba(255,255,255,0.45)' }}
-                            >
-                              {[oi.size, oi.dough].filter(Boolean).join(' · ')}
-                            </div>
-                          )}
-                        </div>
-                        <div className="flex flex-col items-end gap-1 shrink-0">
-                          <span className="font-black font-mono text-xs text-white">
-                            {fmt(oi.finalPrice * oi.qty)}
-                          </span>
-                          <button
-                            onClick={() => removeItem(oi.uid)}
-                            className="text-[10px] hover:text-red-300 transition-colors cursor-pointer"
-                            style={{ color: 'rgba(255,255,255,0.3)' }}
-                          >
-                            quitar
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              <div
-                className="px-4 pt-2 pb-4 shrink-0 border-t"
-                style={{ borderColor: 'rgba(255,255,255,0.12)' }}
+                % Aplicar Descuento
+              </button>
+              <span className="text-gray-300">|</span>
+              <button
+                onClick={clearCart}
+                disabled={!ready}
+                className="text-xs font-bold text-red-400 hover:text-red-600 disabled:opacity-40 transition-colors"
               >
-                <div className="flex justify-between font-black text-xl mb-3" style={{ color: '#F5C518' }}>
-                  <span>Total</span>
-                  <span className="font-mono">{fmt(total)}</span>
-                </div>
-
-                {showDiscountInput && (
-                  <div className="flex gap-2 mb-2">
-                    <input
-                      type="number"
-                      min="0"
-                      max="100"
-                      placeholder="%"
-                      value={discountInput}
-                      onChange={e => setDiscountInput(e.target.value)}
-                      className="flex-1 bg-white/10 border border-white/20 rounded-lg px-3 py-1.5 text-sm font-mono text-white placeholder-white/30 outline-none focus:border-yellow-400"
-                    />
-                    <button
-                      onClick={applyDiscount}
-                      className="px-3 py-1.5 rounded-lg bg-yellow-400 text-yellow-900 font-bold text-xs cursor-pointer hover:bg-yellow-300 transition-colors"
-                    >
-                      OK
-                    </button>
-                  </div>
-                )}
-
+                Vaciar Orden
+              </button>
+            </div>
+            
+            {showDiscountInput && (
+              <div className="flex gap-2 mt-3 p-3 bg-white border border-gray-200 rounded-xl">
+                <input
+                  type="number"
+                  min="0"
+                  max="100"
+                  placeholder="Porcentaje %"
+                  value={discountInput}
+                  onChange={e => setDiscountInput(e.target.value)}
+                  className="flex-1 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-sm font-mono focus:border-red-500 outline-none"
+                />
                 <button
-                  onClick={() => (rule.payUpfront ? setPaying({ kind: 'cart' }) : submitOrder(null))}
-                  disabled={!ready}
-                  className="w-full py-3.5 rounded-2xl font-black text-white text-base uppercase tracking-wide transition-all cursor-pointer disabled:opacity-35 disabled:cursor-default mb-2.5"
-                  style={{
-                    background: rule.payUpfront
-                      ? ready
-                        ? '#22c55e'
-                        : '#166534'
-                      : ready
-                      ? '#d97706'
-                      : '#78350f',
-                    boxShadow: ready
-                      ? `0 5px 18px ${rule.payUpfront ? 'rgba(34,197,94,0.38)' : 'rgba(217,119,6,0.4)'}`
-                      : 'none',
-                  }}
+                  onClick={applyDiscount}
+                  className="px-4 py-2 rounded-lg bg-gray-900 text-white font-bold text-xs"
                 >
-                  {rule.payUpfront ? `COBRAR ${ready ? fmt(total) : ''}` : '👨‍🍳 ENVIAR A COCINA'}
+                  OK
                 </button>
-
-                <div className="flex items-center justify-center gap-4">
-                  <button
-                    onClick={() => setShowDiscountInput(v => !v)}
-                    disabled={order.length === 0}
-                    className="text-xs font-semibold transition-colors cursor-pointer disabled:opacity-30"
-                    style={{ color: '#F5C518' }}
-                  >
-                    Descuento {discount > 0 && `(${discount}%)`}
-                  </button>
-                  <span style={{ color: 'rgba(255,255,255,0.2)', fontSize: 10 }}>·</span>
-                  <button
-                    onClick={clearCart}
-                    disabled={!ready}
-                    className="text-xs font-semibold text-red-400 hover:text-red-300 transition-colors cursor-pointer disabled:opacity-30"
-                  >
-                    Vaciar
-                  </button>
-                </div>
               </div>
-            </>
-          )}
-
-          {/* ── COMANDAS TAB ── */}
-          {rightTab === 'comandas' && (
-            <>
-              <div className="px-4 pt-3 pb-2 shrink-0 flex flex-col gap-2">
-                <div className="flex items-center justify-between gap-2">
-                  <span className="font-black text-base uppercase tracking-wide" style={{ color: '#F5C518' }}>
-                    Comandas
-                  </span>
-                  <div className="flex items-center gap-2">
-                    {closedCount > 0 && (
-                      <button
-                        onClick={clearClosed}
-                        className="text-[10px] font-black uppercase tracking-wide px-2.5 py-1 rounded-lg transition-colors cursor-pointer flex items-center gap-1"
-                        style={{
-                          background: 'rgba(34,197,94,0.15)',
-                          color: '#4ade80',
-                          border: '1px solid rgba(34,197,94,0.35)',
-                        }}
-                      >
-                        🧹 Limpiar ({closedCount})
-                      </button>
-                    )}
-                    <span className="text-[10px] font-mono text-white/50">{activeCount} activas</span>
-                  </div>
-                </div>
-                <div className="flex gap-1.5 flex-wrap">
-                  {STATUS_LIST.map(
-                    s =>
-                      countBy(s) > 0 && (
-                        <span
-                          key={s}
-                          className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${STATUS[s].badge}`}
-                        >
-                          {countBy(s)} {STATUS[s].label}
-                        </span>
-                      )
-                  )}
-                </div>
-              </div>
-              <div className="mx-4 h-px mb-2 shrink-0" style={{ background: 'rgba(255,255,255,0.12)' }} />
-
-              <div
-                className="flex-1 overflow-y-auto px-3 pb-3 space-y-3"
-                style={{
-                  scrollbarWidth: 'thin',
-                  scrollbarColor: 'rgba(255,255,255,0.2) transparent',
-                }}
-              >
-                {orders.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center h-40 gap-3 opacity-40">
-                    <span className="text-3xl">📋</span>
-                    <span className="text-white/60 text-xs text-center leading-relaxed">
-                      No hay órdenes
-                      <br />
-                      Toma un pedido para comenzar
-                    </span>
-                  </div>
-                ) : (
-                  orders.map(o => {
-                    const st = STATUS[o.status]
-                    const type = ORDER_TYPES[o.orderType]
-                    const actions = nextActions(o)
-                    const unpaid = o.payMethod === null && !isClosed(o.status)
-
-                    return (
-                      <div
-                        key={o.id}
-                        className="rounded-2xl overflow-hidden transition-all duration-300"
-                        style={{
-                          background: st.bg,
-                          border: `1.5px solid ${st.border}`,
-                          opacity: isClosed(o.status) ? 0.65 : 1,
-                        }}
-                      >
-                        <div
-                          className="flex items-center gap-2 px-3 pt-3 pb-2 border-b"
-                          style={{ borderColor: 'rgba(255,255,255,0.08)' }}
-                        >
-                          <span className="font-mono font-black text-base" style={{ color: '#F5C518' }}>
-                            {o.id}
-                          </span>
-                          <span className="text-[11px] font-bold text-white/70 bg-white/10 px-2 py-0.5 rounded-md flex items-center gap-1">
-                            {type.icon} {type.label}
-                          </span>
-                          <div className="flex-1" />
-                          <span className="text-[10px] font-mono text-white/40">{o.time}</span>
-                        </div>
-
-                        <div className="px-3 py-2 text-[11px] text-white/80 leading-relaxed">
-                          {o.items.map(i => (
-                            <div key={i.uid} className="flex justify-between">
-                              <span>
-                                {i.qty}× {i.item.name}
-                                {i.size ? ` (${i.size})` : ''}
-                                {i.dough ? ` · ${i.dough}` : ''}
-                              </span>
-                              <span className="font-mono text-white/60">{fmt(i.finalPrice * i.qty)}</span>
-                            </div>
-                          ))}
-                        </div>
-
-                        <div
-                          className="flex items-center justify-between px-3 py-2"
-                          style={{ background: 'rgba(0,0,0,0.2)' }}
-                        >
-                          <span className="text-[10px] font-black text-white/70 uppercase tracking-wider">
-                            {st.label}
-                            {unpaid ? ' · por cobrar' : ''}
-                          </span>
-                          <span className="font-mono font-black text-white">{fmt(o.total)}</span>
-                        </div>
-
-                        <div className="p-3 pt-2 space-y-2">
-                          {actions.length > 0 && (
-                            <div className={`grid gap-2 ${actions.length > 1 ? 'grid-cols-2' : 'grid-cols-1'}`}>
-                              {actions.map(a => {
-                                const tone = TONE[a.tone]
-                                return (
-                                  <button
-                                    key={a.label}
-                                    onClick={() =>
-                                      a.charge
-                                        ? setPaying({ kind: 'order', id: o.id })
-                                        : a.to && advance(o.id, a.to)
-                                    }
-                                    className="py-3 rounded-xl font-black text-[11px] uppercase tracking-wide transition-all cursor-pointer"
-                                    style={{
-                                      background: tone.background,
-                                      color: tone.color,
-                                      boxShadow: `0 4px 14px ${tone.shadow}`,
-                                    }}
-                                  >
-                                    {a.icon} {a.label}
-                                  </button>
-                                )
-                              })}
-                            </div>
-                          )}
-
-                          {canCancel(o) && (
-                            <button
-                              onClick={() => setCancelTarget(o)}
-                              className="w-full py-1.5 rounded-lg text-[11px] font-bold text-red-300/80 hover:text-red-200 border border-red-400/25 hover:bg-red-500/10 transition-colors cursor-pointer"
-                            >
-                              🚫 Cancelar pedido
-                            </button>
-                          )}
-
-                          {o.status === 'entregado' && (
-                            <div className="text-center py-1 text-[11px] font-bold text-green-300/80 uppercase tracking-widest">
-                              ✓ Orden finalizada
-                            </div>
-                          )}
-                          {o.status === 'cancelado' && (
-                            <div className="text-center py-1 text-[11px] font-bold text-red-300/80 leading-snug">
-                              🚫 Cancelada{o.cancelReason ? ` · ${o.cancelReason}` : ''}
-                              {o.refund ? (
-                                <div className="font-mono text-yellow-300/90">Devolver {fmt(o.refund)}</div>
-                              ) : null}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    )
-                  })
-                )}
-              </div>
-            </>
-          )}
+            )}
+          </div>
         </div>
       </div>
 
-      {/* Customizer modal */}
       {customizing && (
         <CustomizerModal
-          item={customizing}
+          item={customizing.item}
+          initialQty={customizing.initial?.qty}
+          initialSize={customizing.initial?.size}
+          initialDough={customizing.initial?.dough}
+          initialComments={customizing.initial?.comments}
           onConfirm={confirmCustomize}
           onClose={() => setCustomizing(null)}
         />
       )}
 
-      {/* Cancel dialog */}
-      {cancelTarget && (
-        <CancelDialog
-          order={cancelTarget}
-          onConfirm={confirmCancel}
-          onClose={() => setCancelTarget(null)}
+      {showOrderType && (
+        <OrderTypeModal 
+          clientsStore={clientsStore}
+          onConfirm={handleOrderTypeConfirm}
+          onClose={() => setShowOrderType(false)}
         />
       )}
 
-      {/* Toast */}
+      {showPending && (
+        <PendingAccountsModal 
+          ordersStore={ordersStore}
+          onClose={() => setShowPending(false)}
+          onPayOrder={(id) => setPaying({ kind: 'order', id })}
+        />
+      )}
+
+      {showExit && (
+        <ExitMenuModal 
+          onClose={() => setShowExit(false)}
+          onLogout={onLogout}
+        />
+      )}
+
       {toast && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-gray-900 border border-gray-700 text-white px-5 py-3 rounded-2xl font-semibold shadow-2xl z-50 text-sm">
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-gray-900 text-white px-6 py-3 rounded-full font-bold shadow-2xl z-50 text-sm animate-bounce">
           {toast}
         </div>
       )}
