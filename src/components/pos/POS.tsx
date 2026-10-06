@@ -1,6 +1,7 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
   Category,
+  Cliente,
   MenuItem,
   Order,
   OrderItem,
@@ -11,7 +12,6 @@ import {
   PizzaDough,
   PizzaSize,
 } from '../../types'
-import { MENU } from '../../data/menu'
 import {
   ORDER_TYPES,
   STATUS,
@@ -23,6 +23,8 @@ import {
   nextActions,
 } from '../../constants/orderRules'
 import { calcTotals, fmt, nowTime, uid, unitPrice } from '../../utils/formatters'
+import { useMenu } from '../../hooks/useMenu'
+import { api } from '../../services/api'
 import { CustomizerModal } from '../modals/CustomizerModal'
 import { CancelDialog } from '../modals/CancelDialog'
 import { PayScreen } from './PayScreen'
@@ -35,10 +37,15 @@ interface POSProps {
 }
 
 export function POS({ onLogout, store }: POSProps) {
-  const { orders } = store
+  const { orders, loading: ordersLoading, error: ordersError } = store
+  const { menu, loading: menuLoading, error: menuError } = useMenu()
+
   const [category, setCategory] = useState<Category>('pizzas')
   const [order, setOrder] = useState<OrderItem[]>([])
   const [orderType, setOrderType] = useState<OrderType>('llevar')
+  const [selectedClient, setSelectedClient] = useState<Cliente | null>(null)
+  const [clients, setClients] = useState<Cliente[]>([])
+  const [clientSearch, setClientSearch] = useState('')
   const [discount, setDiscount] = useState(0)
   const [showDiscountInput, setShowDiscountInput] = useState(false)
   const [discountInput, setDiscountInput] = useState('')
@@ -47,10 +54,27 @@ export function POS({ onLogout, store }: POSProps) {
   const [cancelTarget, setCancelTarget] = useState<Order | null>(null)
   const [rightTab, setRightTab] = useState<'orden' | 'comandas'>('orden')
   const [toast, setToast] = useState<string | null>(null)
+  const [isSubmitting, setIsSubmitting] = useState(false)
   const toastTimer = useRef<number | undefined>(undefined)
 
+  // Cargar clientes al montar
+  useEffect(() => {
+    api.getClientes().then(setClients).catch(console.error)
+  }, [])
+
   // ── Derivados ──
-  const filtered = MENU.filter(i => i.category === category)
+  const filteredMenu = menu.filter(i => (i.category || '').toLowerCase() === category.toLowerCase())
+  const filteredClients = clients.filter(c => {
+    if (!clientSearch) return true
+    const term = clientSearch.toLowerCase()
+    return (
+      c.nombre.toLowerCase().includes(term) ||
+      (c.apellido && c.apellido.toLowerCase().includes(term)) ||
+      c.celular.includes(term) ||
+      (c.direccion_principal && c.direccion_principal.toLowerCase().includes(term))
+    )
+  })
+
   const { total } = calcTotals(order, discount)
   const totalItems = order.reduce((s, i) => s + i.qty, 0)
   const rule = ORDER_TYPES[orderType]
@@ -58,10 +82,10 @@ export function POS({ onLogout, store }: POSProps) {
   const activeCount = orders.filter(o => !isClosed(o.status)).length
   const closedCount = orders.length - activeCount
   const countBy = (s: OrderStatus) => orders.filter(o => o.status === s).length
-  const getItemCount = (id: string) =>
+  const getItemCount = (id: string | number) =>
     order.filter(i => i.item.id === id).reduce((s, i) => s + i.qty, 0)
 
-  const notify = (msg: string, ms = 2500) => {
+  const notify = (msg: string, ms = 3000) => {
     setToast(msg)
     window.clearTimeout(toastTimer.current)
     toastTimer.current = window.setTimeout(() => setToast(null), ms)
@@ -80,8 +104,13 @@ export function POS({ onLogout, store }: POSProps) {
       ]
     })
 
-  const addItem = (item: MenuItem) =>
-    item.category === 'pizzas' ? setCustomizing(item) : addLine(item)
+  const addItem = (item: MenuItem) => {
+    if (item.category === 'pizzas') {
+      setCustomizing(item)
+    } else {
+      addLine(item)
+    }
+  }
 
   const confirmCustomize = (size: PizzaSize, dough: PizzaDough) => {
     if (customizing) addLine(customizing, size, dough)
@@ -90,7 +119,7 @@ export function POS({ onLogout, store }: POSProps) {
 
   const removeItem = (u: string) => setOrder(prev => prev.filter(i => i.uid !== u))
 
-  const removeOne = (itemId: string) => {
+  const removeOne = (itemId: string | number) => {
     const last = [...order].reverse().find(i => i.item.id === itemId)
     if (!last) return
     setOrder(prev =>
@@ -103,6 +132,7 @@ export function POS({ onLogout, store }: POSProps) {
   const clearCart = () => {
     setOrder([])
     setDiscount(0)
+    setSelectedClient(null)
     setShowDiscountInput(false)
     setDiscountInput('')
   }
@@ -114,48 +144,88 @@ export function POS({ onLogout, store }: POSProps) {
     setDiscountInput('')
   }
 
-  // ── Órdenes ──
-  const submitOrder = (payMethod: PayMethod | null) => {
-    const id = store.create({
-      items: order,
-      discount,
-      total,
-      payMethod,
-      status: 'preparando',
-      time: nowTime(),
-      cashier: 'Cajero',
-      orderType,
-    })
-    clearCart()
-    setRightTab('comandas')
-    notify(
-      `${rule.icon} ${id} enviada a cocina${payMethod ? ' — cobrada' : ' — cobro pendiente'}`,
-      3500
-    )
+  const handleSelectClient = (c: Cliente) => {
+    setSelectedClient(c)
+    setOrderType('domicilio')
+    notify(`🛵 Cliente seleccionado: ${c.nombre} ${c.apellido || ''}`)
   }
 
-  const confirmPayment = (method: PayMethod) => {
+  // ── Órdenes en Backend ──
+  const submitOrder = async (
+    payMethod: PayMethod | null,
+    paymentDetails?: { montoRecibido?: number; cambio?: number; propina?: number }
+  ) => {
+    if (isSubmitting) return
+    setIsSubmitting(true)
+    try {
+      const folio = await store.create(
+        {
+          items: order,
+          discount,
+          total,
+          payMethod,
+          status: 'preparando',
+          time: nowTime(),
+          cashier: 'Ana López',
+          orderType,
+          idCliente: selectedClient?.id_cliente || null,
+          clienteNombre: selectedClient ? `${selectedClient.nombre} ${selectedClient.apellido || ''}`.trim() : undefined,
+          clienteCelular: selectedClient?.celular,
+          clienteNotas: selectedClient?.notas || undefined,
+        },
+        paymentDetails
+      )
+      clearCart()
+      setRightTab('comandas')
+      notify(
+        `${rule.icon} ${folio} enviada a cocina${payMethod ? ' — cobrada' : ' — cobro pendiente'}`,
+        3500
+      )
+    } catch (err: any) {
+      notify(`❌ Error: ${err.message || 'No se pudo guardar la orden'}`)
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  const confirmPayment = async (
+    method: PayMethod,
+    details?: { montoRecibido?: number; cambio?: number; propina?: number }
+  ) => {
     if (!paying) return
     if (paying.kind === 'cart') {
-      submitOrder(method)
+      await submitOrder(method, details)
     } else {
-      store.collect(paying.id, method)
-      notify(`✅ Orden ${paying.id} cobrada y finalizada`, 3500)
-      setRightTab('comandas')
+      try {
+        await store.collect(paying.id, method, details)
+        notify(`✅ Orden ${paying.id} cobrada y finalizada`, 3500)
+        setRightTab('comandas')
+      } catch (err: any) {
+        notify(`❌ Error al registrar cobro: ${err.message}`)
+      }
     }
     setPaying(null)
   }
 
-  const advance = (id: string, status: OrderStatus) => {
-    store.setStatus(id, status)
-    notify(STATUS_TOAST[status] ?? 'Estado actualizado')
+  const advance = async (id: string, status: OrderStatus) => {
+    try {
+      await store.setStatus(id, status)
+      notify(STATUS_TOAST[status] ?? 'Estado actualizado')
+    } catch (err: any) {
+      notify(`❌ Error: ${err.message}`)
+    }
   }
 
-  const confirmCancel = (reason: string) => {
+  const confirmCancel = async (reason: string) => {
     if (!cancelTarget) return
-    store.cancel(cancelTarget.id, reason)
-    notify(`🚫 Orden ${cancelTarget.id} cancelada`)
-    setCancelTarget(null)
+    try {
+      await store.cancel(cancelTarget.id, reason)
+      notify(`🚫 Orden ${cancelTarget.id} cancelada`)
+    } catch (err: any) {
+      notify(`❌ Error al cancelar: ${err.message}`)
+    } finally {
+      setCancelTarget(null)
+    }
   }
 
   const clearClosed = () => {
@@ -198,14 +268,13 @@ export function POS({ onLogout, store }: POSProps) {
           <span className="font-black text-gray-900 text-base tracking-tight">Pizzería Volcán</span>
           <span className="text-gray-300 mx-1">·</span>
           <span className="text-gray-400 text-sm font-medium">Punto de Venta</span>
+          <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-mono font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 ml-2">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+            Supabase Conectado
+          </span>
         </div>
         <div className="flex items-center gap-3">
-          <button
-            onClick={onLogout}
-            className="text-xs text-gray-400 hover:text-gray-700 px-3 py-1.5 rounded-lg border border-gray-200 hover:border-gray-300 transition-colors cursor-pointer font-medium"
-          >
-           Clientes
-          </button>
+          <span className="text-gray-400 font-mono text-xs">{nowTime()}</span>
           <button
             onClick={onLogout}
             className="text-xs text-gray-400 hover:text-gray-700 px-3 py-1.5 rounded-lg border border-gray-200 hover:border-gray-300 transition-colors cursor-pointer font-medium"
@@ -215,21 +284,30 @@ export function POS({ onLogout, store }: POSProps) {
         </div>
       </header>
 
+      {(ordersError || menuError) && (
+        <div className="bg-red-500/10 border-b border-red-500/20 text-red-700 px-4 py-1.5 text-xs text-center font-medium">
+          ⚠️ Aviso de conexión: {ordersError || menuError}
+        </div>
+      )}
+
       <div className="flex flex-1 overflow-hidden gap-3 p-3">
-        {/* ── LEFT: Menu ─────────────────────────────────────────────────── */}
+        {/* ── LEFT: Menu & Clients Catalog ─────────────────────────────────── */}
         <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
-          <div className="flex gap-2 mb-3 shrink-0">
+          {/* Categorías tabs */}
+          <div className="flex gap-2 mb-3 shrink-0 overflow-x-auto pb-1">
             {(
               [
-                ['pizzas', 'Pizzas'],
-                ['snacks', 'Snacks'],
-                ['bebidas', 'Bebidas'],
+                ['pizzas', '🍕 Pizzas'],
+                ['snacks', '🍗 Snacks'],
+                ['bebidas', '🥤 Bebidas'],
+                ['paquetes', '📦 Paquetes'],
+                ['Clientes', '👥 Clientes'],
               ] as const
             ).map(([cat, label]) => (
               <button
                 key={cat}
-                onClick={() => setCategory(cat)}
-                className={`px-5 py-2.5 rounded-xl text-sm font-bold transition-all cursor-pointer ${
+                onClick={() => setCategory(cat as Category)}
+                className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer shrink-0 ${
                   category === cat
                     ? 'bg-[#C41E3A] text-white shadow-lg shadow-red-900/20'
                     : 'bg-[#252535] text-gray-300 hover:bg-[#32324a] hover:text-white'
@@ -243,75 +321,166 @@ export function POS({ onLogout, store }: POSProps) {
           <div
             className="flex-1 overflow-y-auto"
             style={{
-              maskImage: 'linear-gradient(to bottom, black 82%, transparent 100%)',
-              WebkitMaskImage: 'linear-gradient(to bottom, black 82%, transparent 100%)',
+              maskImage: 'linear-gradient(to bottom, black 86%, transparent 100%)',
+              WebkitMaskImage: 'linear-gradient(to bottom, black 86%, transparent 100%)',
               scrollbarWidth: 'thin',
               scrollbarColor: '#4a4a5a transparent',
             }}
           >
-            <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2.5 pb-10 pr-1">
-              {filtered.map(item => {
-                const count = getItemCount(item.id)
-                return (
-                  <div
-                    key={item.id}
-                    onClick={() => addItem(item)}
-                    className={`relative text-left rounded-2xl p-4 flex flex-col transition-all cursor-pointer group ${
-                      count > 0
-                        ? 'border-2 border-[#C41E3A]/70 shadow-lg shadow-red-900/15'
-                        : 'border-2 border-transparent hover:border-[#3d3d5a]'
-                    }`}
-                    style={{
-                      background:
-                        count > 0
-                          ? 'linear-gradient(135deg, #1f1f38, #181830)'
-                          : 'linear-gradient(135deg, #1a1a2e, #16213e)',
-                    }}
-                  >
-                    {count > 0 && (
-                      <span
-                        className="absolute top-2.5 right-2.5 w-5 h-5 rounded-full text-white text-[10px] font-black font-mono flex items-center justify-center"
-                        style={{ background: '#C41E3A' }}
-                      >
-                        {count}
-                      </span>
-                    )}
-                    <span className="text-4xl mb-2.5 leading-none">{item.emoji}</span>
-                    <span className="font-bold text-white text-sm leading-tight">{item.name}</span>
-                    <span className="text-gray-400 text-[11px] mt-0.5 leading-snug line-clamp-2 mb-3">
-                      {item.desc}
-                    </span>
-                    <span className="font-black font-mono text-base mb-3" style={{ color: '#F5C518' }}>
-                      {fmt(item.basePrice)}
-                    </span>
-
-                    <div
-                      className="flex items-center gap-1.5 mt-auto"
-                      onClick={e => e.stopPropagation()}
+            {/* VISTA CLIENTES */}
+            {category === 'Clientes' ? (
+              <div className="space-y-3 pb-10 pr-1">
+                <div className="flex items-center gap-2 bg-[#1a1a2e] p-3 rounded-2xl border border-[#2d2d4a]">
+                  <span className="text-xl">🔍</span>
+                  <input
+                    type="text"
+                    placeholder="Buscar cliente por teléfono, nombre o dirección..."
+                    value={clientSearch}
+                    onChange={e => setClientSearch(e.target.value)}
+                    className="flex-1 bg-transparent text-white text-sm outline-none placeholder-gray-500 font-medium"
+                  />
+                  {clientSearch && (
+                    <button
+                      onClick={() => setClientSearch('')}
+                      className="text-gray-400 hover:text-white text-xs px-2 py-1 rounded-lg"
                     >
-                      <button
-                        onClick={() => removeOne(item.id)}
-                        disabled={count === 0}
-                        className="w-7 h-7 rounded-lg font-bold text-white text-lg flex items-center justify-center transition-colors cursor-pointer disabled:opacity-30 leading-none"
-                        style={{ background: count === 0 ? '#3a1a22' : '#C41E3A' }}
+                      Limpiar
+                    </button>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {filteredClients.map(c => {
+                    const isSelected = selectedClient?.id_cliente === c.id_cliente
+                    return (
+                      <div
+                        key={c.id_cliente}
+                        onClick={() => handleSelectClient(c)}
+                        className={`p-4 rounded-2xl cursor-pointer transition-all border ${
+                          isSelected
+                            ? 'bg-[#2a1a2e] border-[#C41E3A] shadow-lg shadow-red-900/20 ring-1 ring-[#C41E3A]'
+                            : 'bg-[#181828] border-[#2d2d45] hover:border-gray-500 hover:bg-[#202035]'
+                        }`}
                       >
-                        −
-                      </button>
-                      <span className="flex-1 text-center font-mono font-bold text-white text-sm">
-                        {count}
-                      </span>
-                      <button
+                        <div className="flex items-center justify-between mb-1.5">
+                          <span className="font-bold text-white text-sm">
+                            {c.nombre} {c.apellido || ''}
+                          </span>
+                          <span className="font-mono text-xs font-semibold px-2 py-0.5 rounded-md bg-white/10 text-amber-300">
+                            📞 {c.celular}
+                          </span>
+                        </div>
+                        {c.direccion_principal && (
+                          <div className="text-xs text-gray-300 leading-snug mb-1">
+                            📍 {c.direccion_principal}
+                            {c.referencias ? ` (${c.referencias})` : ''}
+                          </div>
+                        )}
+                        {c.notas && (
+                          <div className="text-[11px] text-amber-200/90 font-medium bg-amber-500/10 border border-amber-500/20 px-2 py-1 rounded-lg mt-2">
+                            📝 {c.notas}
+                          </div>
+                        )}
+                        <div className="mt-3 flex items-center justify-between">
+                          <span className="text-[10px] text-gray-400 font-mono">
+                            {c.total_ordenes || 0} pedidos previos
+                          </span>
+                          <span
+                            className={`text-xs font-bold px-2.5 py-1 rounded-lg ${
+                              isSelected ? 'bg-[#C41E3A] text-white' : 'bg-white/10 text-gray-300'
+                            }`}
+                          >
+                            {isSelected ? '✓ Seleccionado' : 'Asignar a Domicilio'}
+                          </span>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            ) : (
+              /* VISTA PRODUCTOS Y PAQUETES */
+              menuLoading ? (
+                <div className="flex items-center justify-center h-48 text-gray-400 font-mono text-sm">
+                  Cargando catálogo desde Supabase...
+                </div>
+              ) : filteredMenu.length === 0 ? (
+                <div className="flex items-center justify-center h-48 text-gray-400 font-mono text-sm">
+                  No hay productos disponibles en esta categoría
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2.5 pb-10 pr-1">
+                  {filteredMenu.map(item => {
+                    const count = getItemCount(item.id)
+                    return (
+                      <div
+                        key={item.id}
                         onClick={() => addItem(item)}
-                        className="w-7 h-7 rounded-lg font-bold text-white text-lg flex items-center justify-center transition-colors cursor-pointer leading-none"
-                        style={{ background: '#C41E3A' }}
+                        className={`relative text-left rounded-2xl p-4 flex flex-col transition-all cursor-pointer group ${
+                          count > 0
+                            ? 'border-2 border-[#C41E3A]/70 shadow-lg shadow-red-900/15'
+                            : 'border-2 border-transparent hover:border-[#3d3d5a]'
+                        }`}
+                        style={{
+                          background:
+                            count > 0
+                              ? 'linear-gradient(135deg, #1f1f38, #181830)'
+                              : 'linear-gradient(135deg, #1a1a2e, #16213e)',
+                        }}
                       >
-                        +
-                      </button>
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
+                        {count > 0 && (
+                          <span
+                            className="absolute top-2.5 right-2.5 w-5 h-5 rounded-full text-white text-[10px] font-black font-mono flex items-center justify-center"
+                            style={{ background: '#C41E3A' }}
+                          >
+                            {count}
+                          </span>
+                        )}
+                        <span className="text-4xl mb-2.5 leading-none">{item.emoji}</span>
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-bold text-white text-sm leading-tight">{item.name}</span>
+                          {item.isPackage && (
+                            <span className="bg-amber-500/20 text-amber-300 text-[9px] font-bold px-1.5 py-0.2 rounded border border-amber-500/40">
+                              COMBO
+                            </span>
+                          )}
+                        </div>
+                        <span className="text-gray-400 text-[11px] mt-0.5 leading-snug line-clamp-2 mb-3">
+                          {item.desc}
+                        </span>
+                        <span className="font-black font-mono text-base mb-3" style={{ color: '#F5C518' }}>
+                          {fmt(item.basePrice)}
+                        </span>
+
+                        <div
+                          className="flex items-center gap-1.5 mt-auto"
+                          onClick={e => e.stopPropagation()}
+                        >
+                          <button
+                            onClick={() => removeOne(item.id)}
+                            disabled={count === 0}
+                            className="w-7 h-7 rounded-lg font-bold text-white text-lg flex items-center justify-center transition-colors cursor-pointer disabled:opacity-30 leading-none"
+                            style={{ background: count === 0 ? '#3a1a22' : '#C41E3A' }}
+                          >
+                            −
+                          </button>
+                          <span className="flex-1 text-center font-mono font-bold text-white text-sm">
+                            {count}
+                          </span>
+                          <button
+                            onClick={() => addItem(item)}
+                            className="w-7 h-7 rounded-lg font-bold text-white text-lg flex items-center justify-center transition-colors cursor-pointer leading-none"
+                            style={{ background: '#C41E3A' }}
+                          >
+                            +
+                          </button>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              )
+            )}
           </div>
         </div>
 
@@ -373,6 +542,36 @@ export function POS({ onLogout, store }: POSProps) {
                 <div className="mt-2 text-[10px] text-amber-300/80 text-center leading-tight">
                   {rule.hint}
                 </div>
+
+                {/* Info del Cliente si es Domicilio */}
+                {orderType === 'domicilio' && (
+                  <div className="mt-2 p-2 rounded-xl bg-black/30 border border-white/10 text-xs">
+                    {selectedClient ? (
+                      <div className="space-y-0.5">
+                        <div className="flex items-center justify-between text-amber-300 font-bold">
+                          <span>👤 {selectedClient.nombre}</span>
+                          <button
+                            onClick={() => setSelectedClient(null)}
+                            className="text-[10px] text-white/50 hover:text-red-300"
+                          >
+                            quitar
+                          </button>
+                        </div>
+                        <div className="text-[10px] text-white/70 truncate">📍 {selectedClient.direccion_principal}</div>
+                        {selectedClient.notas && (
+                          <div className="text-[10px] text-amber-200/80 italic truncate">📝 {selectedClient.notas}</div>
+                        )}
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => setCategory('Clientes')}
+                        className="w-full py-1 text-center font-bold text-amber-300 hover:text-amber-200 text-[11px] flex items-center justify-center gap-1"
+                      >
+                        🔍 Seleccionar Cliente Domicilio
+                      </button>
+                    )}
+                  </div>
+                )}
               </div>
 
               <div className="px-4 pb-1 shrink-0 flex items-center justify-between">
@@ -435,6 +634,11 @@ export function POS({ onLogout, store }: POSProps) {
                               {[oi.size, oi.dough].filter(Boolean).join(' · ')}
                             </div>
                           )}
+                          {oi.item.isPackage && (
+                            <div className="text-[10px] text-amber-300 font-semibold mt-0.5">
+                              Combo Paquete
+                            </div>
+                          )}
                         </div>
                         <div className="flex flex-col items-end gap-1 shrink-0">
                           <span className="font-black font-mono text-xs text-white">
@@ -485,7 +689,7 @@ export function POS({ onLogout, store }: POSProps) {
 
                 <button
                   onClick={() => (rule.payUpfront ? setPaying({ kind: 'cart' }) : submitOrder(null))}
-                  disabled={!ready}
+                  disabled={!ready || isSubmitting}
                   className="w-full py-3.5 rounded-2xl font-black text-white text-base uppercase tracking-wide transition-all cursor-pointer disabled:opacity-35 disabled:cursor-default mb-2.5"
                   style={{
                     background: rule.payUpfront
@@ -500,7 +704,11 @@ export function POS({ onLogout, store }: POSProps) {
                       : 'none',
                   }}
                 >
-                  {rule.payUpfront ? `COBRAR ${ready ? fmt(total) : ''}` : '👨‍🍳 ENVIAR A COCINA'}
+                  {isSubmitting
+                    ? 'GUARDANDO EN BASE DE DATOS...'
+                    : rule.payUpfront
+                    ? `COBRAR ${ready ? fmt(total) : ''}`
+                    : '👨‍🍳 ENVIAR A COCINA'}
                 </button>
 
                 <div className="flex items-center justify-center gap-4">
@@ -573,7 +781,11 @@ export function POS({ onLogout, store }: POSProps) {
                   scrollbarColor: 'rgba(255,255,255,0.2) transparent',
                 }}
               >
-                {orders.length === 0 ? (
+                {ordersLoading && orders.length === 0 ? (
+                  <div className="flex items-center justify-center h-40 text-white/50 text-xs font-mono">
+                    Sincronizando comandas...
+                  </div>
+                ) : orders.length === 0 ? (
                   <div className="flex flex-col items-center justify-center h-40 gap-3 opacity-40">
                     <span className="text-3xl">📋</span>
                     <span className="text-white/60 text-xs text-center leading-relaxed">
@@ -584,8 +796,8 @@ export function POS({ onLogout, store }: POSProps) {
                   </div>
                 ) : (
                   orders.map(o => {
-                    const st = STATUS[o.status]
-                    const type = ORDER_TYPES[o.orderType]
+                    const st = STATUS[o.status] || STATUS.preparando
+                    const type = ORDER_TYPES[o.orderType] || ORDER_TYPES.llevar
                     const actions = nextActions(o)
                     const unpaid = o.payMethod === null && !isClosed(o.status)
 
@@ -609,6 +821,11 @@ export function POS({ onLogout, store }: POSProps) {
                           <span className="text-[11px] font-bold text-white/70 bg-white/10 px-2 py-0.5 rounded-md flex items-center gap-1">
                             {type.icon} {type.label}
                           </span>
+                          {o.clienteNombre && (
+                            <span className="text-[10px] text-amber-200 bg-amber-500/15 px-1.5 py-0.5 rounded truncate max-w-[90px]">
+                              {o.clienteNombre}
+                            </span>
+                          )}
                           <div className="flex-1" />
                           <span className="text-[10px] font-mono text-white/40">{o.time}</span>
                         </div>

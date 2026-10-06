@@ -1,6 +1,5 @@
 import { useState } from 'react'
 import { Category, Order, OrderStatus, OrdersStore } from '../../types'
-import { MENU } from '../../data/menu'
 import {
   ALL_PAY,
   ORDER_TYPES,
@@ -11,6 +10,7 @@ import {
   nextActions,
 } from '../../constants/orderRules'
 import { fmt, itemsSummary } from '../../utils/formatters'
+import { useMenu } from '../../hooks/useMenu'
 import { Badge } from '../common/Badge'
 import { CancelDialog } from '../modals/CancelDialog'
 
@@ -20,7 +20,9 @@ interface AdminProps {
 }
 
 export function Admin({ onLogout, store }: AdminProps) {
-  const { orders } = store
+  const { orders, loading: ordersLoading, error: ordersError, refresh } = store
+  const { menu, loading: menuLoading } = useMenu()
+
   const [filter, setFilter] = useState<OrderStatus | 'todos'>('todos')
   const [tab, setTab] = useState<'dashboard' | 'pedidos' | 'menu'>('dashboard')
   const [cancelTarget, setCancelTarget] = useState<Order | null>(null)
@@ -35,20 +37,36 @@ export function Admin({ onLogout, store }: AdminProps) {
   const reembolsos = orders.reduce((s, o) => s + (o.refund ?? 0), 0)
   const filtered = orders.filter(o => filter === 'todos' || o.status === filter)
 
-  // Top productos reales (sin contar órdenes canceladas)
-  const sold = new Map<string, number>()
+  // Top productos reales desde la base de datos (sin contar órdenes canceladas)
+  const sold = new Map<string | number, { name: string; emoji: string; qty: number }>()
   orders
     .filter(o => o.status !== 'cancelado')
     .forEach(o =>
-      o.items.forEach(i => sold.set(i.item.id, (sold.get(i.item.id) ?? 0) + i.qty))
+      o.items.forEach(i => {
+        const id = i.item.id
+        const prev = sold.get(id) || { name: i.item.name, emoji: i.item.emoji, qty: 0 }
+        sold.set(id, { ...prev, qty: prev.qty + i.qty })
+      })
     )
-  const topProducts = [...sold.entries()]
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 5)
-    .flatMap(([id, qty]) => {
-      const item = MENU.find(m => m.id === id)
-      return item ? [{ item, qty }] : []
-    })
+  const topProducts = [...sold.values()].sort((a, b) => b.qty - a.qty).slice(0, 5)
+
+  const handleAdvance = async (id: string, to: OrderStatus) => {
+    try {
+      await store.setStatus(id, to)
+    } catch (err: any) {
+      alert(`Error al actualizar estado: ${err.message}`)
+    }
+  }
+
+  const handleCancelConfirm = async (reason: string) => {
+    if (!cancelTarget) return
+    try {
+      await store.cancel(cancelTarget.id, reason)
+      setCancelTarget(null)
+    } catch (err: any) {
+      alert(`Error al cancelar orden: ${err.message}`)
+    }
+  }
 
   return (
     <div
@@ -60,14 +78,33 @@ export function Admin({ onLogout, store }: AdminProps) {
           <span className="text-lg">🍕</span>
           <span className="font-bold text-white text-sm">Pizzería Volcán</span>
           <span className="text-[#404040] text-xs font-mono ml-2">Admin · Patrón</span>
+          <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-mono font-semibold bg-emerald-950 text-emerald-400 border border-emerald-800 ml-2">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+            Supabase Conectado
+          </span>
         </div>
-        <button
-          onClick={onLogout}
-          className="text-xs text-[#8a8a8a] hover:text-white transition-colors px-2 py-1 rounded border border-[#272727] hover:border-[#404040] cursor-pointer"
-        >
-          Salir
-        </button>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => refresh()}
+            className="text-xs text-gray-400 hover:text-white transition-colors px-2.5 py-1 rounded border border-[#272727] hover:border-[#404040] cursor-pointer flex items-center gap-1.5 font-mono"
+            title="Sincronizar con Supabase"
+          >
+            <span>🔄</span> Actualizar
+          </button>
+          <button
+            onClick={onLogout}
+            className="text-xs text-[#8a8a8a] hover:text-white transition-colors px-2 py-1 rounded border border-[#272727] hover:border-[#404040] cursor-pointer"
+          >
+            Salir
+          </button>
+        </div>
       </header>
+
+      {ordersError && (
+        <div className="bg-red-950/60 border-b border-red-800/50 text-red-300 px-4 py-1.5 text-xs text-center font-medium">
+          ⚠️ Error de conexión: {ordersError}
+        </div>
+      )}
 
       <div className="flex border-b border-[#272727] bg-[#0e0e0e] shrink-0 px-2">
         {(
@@ -163,23 +200,23 @@ export function Admin({ onLogout, store }: AdminProps) {
                 })}
               </div>
               <div className="bg-[#141414] border border-[#272727] rounded-xl p-5">
-                <h3 className="font-semibold text-white mb-4">Top productos</h3>
+                <h3 className="font-semibold text-white mb-4">Top productos vendidos</h3>
                 {topProducts.length === 0 && (
-                  <div className="text-[#404040] text-sm py-2">Aún no hay ventas</div>
+                  <div className="text-[#404040] text-sm py-2 font-mono">Aún no hay ventas registradas</div>
                 )}
-                {topProducts.map(({ item, qty }, idx) => (
-                  <div key={item.id} className="flex items-center gap-3 py-1.5">
+                {topProducts.map((p, idx) => (
+                  <div key={p.name} className="flex items-center gap-3 py-1.5">
                     <span className="text-[#404040] font-mono text-xs w-4">{idx + 1}</span>
-                    <span>{item.emoji}</span>
-                    <span className="flex-1 text-sm text-[#d0d0d0]">{item.name}</span>
-                    <span className="font-mono text-sm text-[#C41E3A]">{qty}×</span>
+                    <span>{p.emoji}</span>
+                    <span className="flex-1 text-sm text-[#d0d0d0]">{p.name}</span>
+                    <span className="font-mono text-sm text-[#C41E3A]">{p.qty}×</span>
                   </div>
                 ))}
               </div>
             </div>
             <div className="bg-[#141414] border border-[#272727] rounded-xl overflow-hidden">
               <div className="px-5 py-4 border-b border-[#1e1e1e]">
-                <h3 className="font-semibold text-white">Últimos pedidos</h3>
+                <h3 className="font-semibold text-white">Últimos pedidos registrados</h3>
               </div>
               <div className="divide-y divide-[#1e1e1e]">
                 {orders.slice(0, 5).map(o => (
@@ -204,7 +241,7 @@ export function Admin({ onLogout, store }: AdminProps) {
         {tab === 'pedidos' && (
           <div className="max-w-5xl mx-auto space-y-4">
             <div className="flex items-center justify-between flex-wrap gap-2">
-              <h2 className="text-xl font-bold text-white">Gestión de pedidos</h2>
+              <h2 className="text-xl font-bold text-white">Gestión de pedidos (Base de Datos)</h2>
               <div className="flex gap-1.5 flex-wrap">
                 {(['todos', ...STATUS_LIST] as const).map(s => (
                   <button
@@ -222,8 +259,11 @@ export function Admin({ onLogout, store }: AdminProps) {
               </div>
             </div>
             <div className="space-y-2">
+              {ordersLoading && orders.length === 0 && (
+                <div className="text-center py-16 text-gray-500 font-mono">Cargando órdenes...</div>
+              )}
               {filtered.map(o => {
-                const type = ORDER_TYPES[o.orderType]
+                const type = ORDER_TYPES[o.orderType] || ORDER_TYPES.llevar
                 const all = nextActions(o)
                 const actions = all.filter(a => !a.charge) // el cobro se registra en caja (POS)
                 const awaitingCharge = all.some(a => a.charge)
@@ -242,7 +282,7 @@ export function Admin({ onLogout, store }: AdminProps) {
                         {actions.map(a => (
                           <button
                             key={a.label}
-                            onClick={() => a.to && store.setStatus(o.id, a.to)}
+                            onClick={() => a.to && handleAdvance(o.id, a.to)}
                             className="text-xs px-3 py-1.5 bg-[#C41E3A] hover:bg-[#a01830] text-white rounded-lg font-medium transition-colors cursor-pointer"
                           >
                             {a.label}
@@ -272,7 +312,7 @@ export function Admin({ onLogout, store }: AdminProps) {
                       </div>
                       <div className="flex items-center gap-3 shrink-0">
                         <span className="text-[#8a8a8a] text-xs">
-                          {o.payMethod ? PAY[o.payMethod].icon : '⏳'}
+                          {o.payMethod ? PAY[o.payMethod]?.icon : '⏳'}
                         </span>
                         <span className="font-mono font-bold text-white">{fmt(o.total)}</span>
                       </div>
@@ -280,7 +320,7 @@ export function Admin({ onLogout, store }: AdminProps) {
                   </div>
                 )
               })}
-              {filtered.length === 0 && (
+              {filtered.length === 0 && !ordersLoading && (
                 <div className="text-center py-16 text-[#404040]">
                   <div className="text-4xl mb-2">📋</div>
                   <div>Sin pedidos en esta categoría</div>
@@ -292,32 +332,39 @@ export function Admin({ onLogout, store }: AdminProps) {
 
         {tab === 'menu' && (
           <div className="max-w-5xl mx-auto space-y-6">
-            <h2 className="text-xl font-bold text-white">Catálogo del menú</h2>
-            {(['pizzas', 'snacks', 'bebidas'] as Category[]).map(cat => (
-              <div key={cat}>
-                <h3 className="font-semibold text-[#8a8a8a] uppercase tracking-widest text-xs font-mono mb-3 capitalize">
-                  {cat}
-                </h3>
-                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
-                  {MENU.filter(m => m.category === cat).map(item => (
-                    <div
-                      key={item.id}
-                      className="bg-[#141414] border border-[#272727] rounded-xl p-4 hover:border-[#404040] transition-colors"
-                    >
-                      <div className="text-2xl mb-2">{item.emoji}</div>
-                      <div className="font-semibold text-white text-sm">{item.name}</div>
-                      <div className="text-[#8a8a8a] text-xs mt-0.5 line-clamp-2">{item.desc}</div>
-                      <div
-                        className="font-mono font-bold text-sm mt-2"
-                        style={{ color: '#C41E3A' }}
-                      >
-                        {fmt(item.basePrice)}
-                      </div>
+            <h2 className="text-xl font-bold text-white">Catálogo del menú (Supabase)</h2>
+            {menuLoading ? (
+              <div className="text-gray-500 font-mono py-12 text-center">Cargando productos...</div>
+            ) : (
+              (['pizzas', 'snacks', 'bebidas'] as Category[]).map(cat => {
+                const prodsInCat = menu.filter(m => (m.category || '').toLowerCase() === cat.toLowerCase())
+                return (
+                  <div key={cat}>
+                    <h3 className="font-semibold text-[#8a8a8a] uppercase tracking-widest text-xs font-mono mb-3 capitalize">
+                      {cat} ({prodsInCat.length})
+                    </h3>
+                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
+                      {prodsInCat.map(item => (
+                        <div
+                          key={item.id}
+                          className="bg-[#141414] border border-[#272727] rounded-xl p-4 hover:border-[#404040] transition-colors"
+                        >
+                          <div className="text-2xl mb-2">{item.emoji}</div>
+                          <div className="font-semibold text-white text-sm">{item.name}</div>
+                          <div className="text-[#8a8a8a] text-xs mt-0.5 line-clamp-2">{item.desc}</div>
+                          <div
+                            className="font-mono font-bold text-sm mt-2"
+                            style={{ color: '#C41E3A' }}
+                          >
+                            {fmt(item.basePrice)}
+                          </div>
+                        </div>
+                      ))}
                     </div>
-                  ))}
-                </div>
-              </div>
-            ))}
+                  </div>
+                )
+              })
+            )}
           </div>
         )}
       </div>
@@ -325,10 +372,7 @@ export function Admin({ onLogout, store }: AdminProps) {
       {cancelTarget && (
         <CancelDialog
           order={cancelTarget}
-          onConfirm={reason => {
-            store.cancel(cancelTarget.id, reason)
-            setCancelTarget(null)
-          }}
+          onConfirm={handleCancelConfirm}
           onClose={() => setCancelTarget(null)}
         />
       )}

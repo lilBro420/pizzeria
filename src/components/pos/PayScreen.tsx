@@ -9,7 +9,10 @@ interface PayScreenProps {
   total: number
   discount: number
   discountAmt: number
-  onConfirm: (payMethod: PayMethod) => void
+  onConfirm: (
+    payMethod: PayMethod,
+    details?: { montoRecibido?: number; cambio?: number; propina?: number }
+  ) => void
   onBack: () => void
 }
 
@@ -66,6 +69,15 @@ export function PayScreen({
         .replace(/\.?0+$/, '')
         .replace(/(\.\d)0$/, '$1')
     )
+  }
+
+  const handleConfirm = () => {
+    if (!canConfirm) return
+    onConfirm(payMethod, {
+      montoRecibido: payMethod === 'efectivo' ? received : total,
+      cambio: payMethod === 'efectivo' ? Math.max(0, change) : 0,
+      propina: 0,
+    })
   }
 
   return (
@@ -335,7 +347,7 @@ export function PayScreen({
           )}
 
           <button
-            onClick={() => onConfirm(payMethod)}
+            onClick={handleConfirm}
             disabled={!canConfirm}
             className="w-full py-4 rounded-2xl font-black text-white text-base uppercase tracking-wide transition-all cursor-pointer disabled:opacity-35 disabled:cursor-not-allowed"
             style={{

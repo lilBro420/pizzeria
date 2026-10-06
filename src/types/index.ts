@@ -1,5 +1,5 @@
 export type Role = 'pos' | 'admin'
-export type Category = 'pizzas' | 'snacks' | 'bebidas' | 'Clientes'
+export type Category = 'pizzas' | 'snacks' | 'bebidas' | 'paquetes' | 'Clientes'
 export type PayMethod = 'efectivo' | 'tarjeta' | 'transferencia'
 export type OrderStatus = 'preparando' | 'listo' | 'en_reparto' | 'esperando' | 'entregado' | 'cancelado'
 export type OrderType = 'local' | 'llevar' | 'recoger' | 'domicilio'
@@ -8,12 +8,15 @@ export type PizzaDough = 'Delgada' | 'Gruesa' | 'Orilla Rellena'
 export type Tone = 'yellow' | 'green' | 'purple' | 'orange' | 'ghost'
 
 export interface MenuItem {
-  id: string
+  id: string | number
   name: string
   basePrice: number
   desc: string
   category: Category
   emoji: string
+  isPackage?: boolean
+  idPaquete?: number
+  itemsIncluidos?: any[]
 }
 
 export interface OrderItem {
@@ -25,8 +28,22 @@ export interface OrderItem {
   finalPrice: number
 }
 
+export interface Cliente {
+  id_cliente: number
+  celular: string
+  nombre: string
+  apellido?: string | null
+  direccion_principal?: string | null
+  referencias?: string | null
+  entre_calles?: string | null
+  codigo_postal?: string | null
+  notas?: string | null
+  total_ordenes?: number
+}
+
 export interface Order {
   id: string
+  numericId?: number
   items: OrderItem[]
   discount: number
   total: number
@@ -37,6 +54,14 @@ export interface Order {
   orderType: OrderType
   cancelReason?: string
   refund?: number
+  idCliente?: number | null
+  clienteNombre?: string
+  clienteApellido?: string
+  clienteCelular?: string
+  clienteDireccion?: string
+  clienteReferencias?: string
+  clienteNotas?: string
+  fechaCreacion?: string
 }
 
 export interface OrderAction {
@@ -49,9 +74,19 @@ export interface OrderAction {
 
 export interface OrdersStore {
   orders: Order[]
-  create: (draft: Omit<Order, 'id'>) => string
-  setStatus: (id: string, status: OrderStatus) => void
-  collect: (id: string, payMethod: PayMethod) => void
-  cancel: (id: string, reason: string) => void
+  loading: boolean
+  error: string | null
+  refresh: () => Promise<void>
+  create: (
+    draft: Omit<Order, 'id'>,
+    paymentDetails?: { montoRecibido?: number; cambio?: number; propina?: number }
+  ) => Promise<string>
+  setStatus: (id: string, status: OrderStatus) => Promise<void>
+  collect: (
+    id: string,
+    payMethod: PayMethod,
+    paymentDetails?: { montoRecibido?: number; cambio?: number; propina?: number }
+  ) => Promise<void>
+  cancel: (id: string, reason: string) => Promise<void>
   clearClosed: () => void
 }
