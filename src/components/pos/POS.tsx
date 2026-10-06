@@ -10,12 +10,12 @@ import {
   PayMethod,
   PizzaDough,
   PizzaSize,
-  Client
+  Client,
+  AppliedPayment
 } from '../../types'
 import { ORDER_TYPES } from '../../constants/orderRules'
 import { calcTotals, fmt, nowTime, uid, unitPrice } from '../../utils/formatters'
 import { CustomizerModal } from '../modals/CustomizerModal'
-import { CancelDialog } from '../modals/CancelDialog'
 import { PayScreen } from './PayScreen'
 import { MenuStore } from '../../hooks/useMenu'
 import { ClientsStore } from '../../hooks/useClients'
@@ -29,7 +29,8 @@ import {
   Trash2, 
   Edit3, 
   ShoppingBag,
-  ListRestart
+  ListRestart,
+  Loader2
 } from 'lucide-react'
 
 type Paying = { kind: 'cart', type: OrderType, client?: Client, table?: string } | { kind: 'order'; id: string }
@@ -42,8 +43,8 @@ interface POSProps {
 }
 
 export function POS({ onLogout, ordersStore, menuStore, clientsStore }: POSProps) {
-  const { orders } = ordersStore
-  const { items: MENU } = menuStore
+  const { orders, loading: ordersLoading, create: createOrder } = ordersStore
+  const { items: MENU, loading: menuLoading } = menuStore
 
   const [category, setCategory] = useState<Category>('Todo')
   const [order, setOrder] = useState<OrderItem[]>([])
@@ -59,9 +60,23 @@ export function POS({ onLogout, ordersStore, menuStore, clientsStore }: POSProps
   const [discountInput, setDiscountInput] = useState('')
   
   const [paying, setPaying] = useState<Paying | null>(null)
-  const [cancelTarget, setCancelTarget] = useState<Order | null>(null)
   const [toast, setToast] = useState<string | null>(null)
   const toastTimer = useRef<number | undefined>(undefined)
+
+  const notify = (msg: string, ms = 2500) => {
+    setToast(msg)
+    window.clearTimeout(toastTimer.current)
+    toastTimer.current = window.setTimeout(() => setToast(null), ms)
+  }
+
+  if (ordersLoading || menuLoading) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-[#f5f5f7] flex-col gap-4 text-red-600">
+        <Loader2 className="animate-spin" size={48} />
+        <span className="font-bold tracking-widest uppercase text-sm">Cargando datos...</span>
+      </div>
+    )
+  }
 
   // ── Derivados ──
   const filtered = category === 'Todo' ? MENU : MENU.filter(i => i.category === category)
@@ -69,14 +84,7 @@ export function POS({ onLogout, ordersStore, menuStore, clientsStore }: POSProps
   const totalItems = order.reduce((s, i) => s + i.qty, 0)
   const ready = order.length > 0
   
-  const activeCount = orders.filter(o => o.status !== 'entregado' && o.status !== 'cancelado').length
   const pendingPaymentCount = orders.filter(o => o.payMethod === null && o.status !== 'entregado' && o.status !== 'cancelado').length
-
-  const notify = (msg: string, ms = 2500) => {
-    setToast(msg)
-    window.clearTimeout(toastTimer.current)
-    toastTimer.current = window.setTimeout(() => setToast(null), ms)
-  }
 
   // ── Carrito ──
   const handleItemClick = (item: MenuItem) => {
@@ -91,7 +99,6 @@ export function POS({ onLogout, ordersStore, menuStore, clientsStore }: POSProps
     if (!customizing) return
     
     if (customizing.initial) {
-      // Editar existente
       setOrder(prev => prev.map(i => {
         if (i.uid === customizing.initial!.uid) {
           return {
@@ -106,7 +113,6 @@ export function POS({ onLogout, ordersStore, menuStore, clientsStore }: POSProps
         return i
       }))
     } else {
-      // Agregar nuevo
       setOrder(prev => [
         ...prev,
         { 
@@ -142,59 +148,61 @@ export function POS({ onLogout, ordersStore, menuStore, clientsStore }: POSProps
   // ── Órdenes ──
   const handleOrderTypeConfirm = (orderType: OrderType, client?: Client, table?: string) => {
     setShowOrderType(false)
-    
     if (ORDER_TYPES[orderType].payUpfront) {
-      // Pasa a cobrar primero
       setPaying({ kind: 'cart', type: orderType, client, table })
     } else {
-      // Enviar a cocina / espera directamente
       submitOrder(null, orderType, client, table)
     }
   }
 
-  const submitOrder = (payMethod: PayMethod | null, orderType: OrderType, client?: Client, table?: string) => {
-    const id = ordersStore.create({
-      items: order,
-      discount,
-      total,
-      payMethod,
-      status: 'preparando',
-      time: nowTime(),
-      cashier: 'Cajero',
-      orderType,
-      client,
-      table
-    })
-    clearCart()
-    if (payMethod) {
-      notify(`✅ Orden ${id} cobrada y enviada a cocina`, 3500)
-    } else {
-      notify(`📝 Orden ${id} enviada a cocina (Cuenta en espera)`, 3500)
+  const submitOrder = async (payMethod: PayMethod | null, orderType: OrderType, client?: Client, table?: string, paymentDetails?: any) => {
+    try {
+      const id = await createOrder({
+        items: order,
+        discount,
+        total,
+        payMethod,
+        status: 'preparando',
+        time: nowTime(),
+        cashier: 'Cajero',
+        orderType,
+        client,
+        table
+      }, paymentDetails)
+      
+      clearCart()
+      if (payMethod) {
+        notify(`✅ Orden ${id} cobrada y enviada a cocina`, 3500)
+      } else {
+        notify(`📝 Orden ${id} enviada a cocina (Cuenta en espera)`, 3500)
+      }
+    } catch (err: any) {
+      alert(`Error al crear orden: ${err.message}`)
     }
   }
 
-  const confirmPayment = (method: PayMethod, amount: number) => {
-    // Si estamos aquí es porque PayScreen maneja el detalle, pero por ahora recibimos el array de pagos
-    // Ajustaremos PayScreen para enviar un arreglo de AppliedPayment
-  }
-
-  // Cuando PayScreen confirma, le pasamos los pagos
-  const handlePayConfirm = (payments: { method: PayMethod, amount: number }[]) => {
+  const handlePayConfirm = async (payments: AppliedPayment[]) => {
     if (!paying) return
+    const mainMethod = payments.length > 0 ? payments[0].method : 'efectivo'
+    const totalPaid = payments.reduce((s, p) => s + p.amount, 0)
+    
+    // Simplificación para API: mandamos montoRecibido y asume el primer método
+    const paymentDetails = { montoRecibido: totalPaid }
+
     if (paying.kind === 'cart') {
-      // Por simplicidad, asumo que el primer método es el principal en submitOrder
-      // Pero para soportar mixtos en submit, tendriamos que guardar los pagos en la orden.
-      submitOrder(payments[0].method, paying.type, paying.client, paying.table)
-      // Idealmente, deberíamos hacer un updateOrder luego de crearla para meter appliedPayments
+      await submitOrder(mainMethod, paying.type, paying.client, paying.table, paymentDetails)
     } else {
-      ordersStore.collect(paying.id, payments)
-      notify(`✅ Orden ${paying.id} cobrada exitosamente`, 3500)
-      setShowPending(false)
+      try {
+        await ordersStore.collect(paying.id, payments, paymentDetails)
+        notify(`✅ Orden cobrada exitosamente`, 3500)
+        setShowPending(false)
+      } catch (err: any) {
+        alert(`Error al cobrar orden: ${err.message}`)
+      }
     }
     setPaying(null)
   }
 
-  // Pantalla de cobro
   const payingOrder = paying?.kind === 'order' ? orders.find(o => o.id === paying.id) : undefined
 
   if (paying && (paying.kind === 'cart' || payingOrder)) {
@@ -215,7 +223,6 @@ export function POS({ onLogout, ordersStore, menuStore, clientsStore }: POSProps
 
   return (
     <div className="flex flex-col h-screen overflow-hidden bg-[#f5f5f7] font-sans">
-      {/* Top bar */}
       <header className="flex items-center justify-between px-4 md:px-6 h-16 bg-white border-b border-gray-200 shrink-0 shadow-sm">
         <div className="flex items-center gap-3">
           <span className="text-3xl">🍕</span>
@@ -254,11 +261,9 @@ export function POS({ onLogout, ordersStore, menuStore, clientsStore }: POSProps
       </header>
 
       <div className="flex flex-col lg:flex-row flex-1 overflow-hidden gap-3 lg:gap-4 p-3 lg:p-4">
-        {/* ── LEFT: Menu ─────────────────────────────────────────────────── */}
         <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
-          {/* Categories */}
           <div className="flex overflow-x-auto gap-2 md:gap-3 mb-4 shrink-0 pb-2 scrollbar-hide">
-            {(['Todo', 'pizzas', 'snacks', 'bebidas'] as Category[]).map(cat => (
+            {(['Todo', 'pizzas', 'snacks', 'bebidas', 'paquetes'] as Category[]).map(cat => (
               <button
                 key={cat}
                 onClick={() => setCategory(cat)}
@@ -278,7 +283,7 @@ export function POS({ onLogout, ordersStore, menuStore, clientsStore }: POSProps
             style={{ scrollbarWidth: 'thin', scrollbarColor: '#cbd5e1 transparent' }}
           >
             {category === 'Todo' && (
-              <div className="mb-6 grid grid-cols-1 sm:grid-cols-3 gap-3 md:gap-4">
+              <div className="mb-6 grid grid-cols-1 sm:grid-cols-4 gap-3 md:gap-4">
                 <button onClick={() => setCategory('pizzas')} className="bg-white border border-gray-200 rounded-3xl p-6 text-center hover:shadow-lg hover:border-red-300 transition-all group">
                   <div className="text-6xl mb-3 group-hover:scale-110 transition-transform">🍕</div>
                   <h3 className="font-black text-xl text-gray-800">Pizzas</h3>
@@ -290,6 +295,10 @@ export function POS({ onLogout, ordersStore, menuStore, clientsStore }: POSProps
                 <button onClick={() => setCategory('bebidas')} className="bg-white border border-gray-200 rounded-3xl p-6 text-center hover:shadow-lg hover:border-blue-300 transition-all group">
                   <div className="text-6xl mb-3 group-hover:scale-110 transition-transform">🥤</div>
                   <h3 className="font-black text-xl text-gray-800">Bebidas</h3>
+                </button>
+                <button onClick={() => setCategory('paquetes')} className="bg-white border border-gray-200 rounded-3xl p-6 text-center hover:shadow-lg hover:border-purple-300 transition-all group">
+                  <div className="text-6xl mb-3 group-hover:scale-110 transition-transform">📦</div>
+                  <h3 className="font-black text-xl text-gray-800">Paquetes</h3>
                 </button>
               </div>
             )}
@@ -315,9 +324,7 @@ export function POS({ onLogout, ordersStore, menuStore, clientsStore }: POSProps
           </div>
         </div>
 
-        {/* ── RIGHT: Order panel ──────────────────────────────── */}
         <div className="w-full lg:w-80 xl:w-96 shrink-0 flex flex-col bg-white rounded-3xl overflow-hidden shadow-2xl border border-gray-200">
-          
           <div className="px-5 py-4 shrink-0 flex items-center justify-between border-b border-gray-100 bg-gray-50/50">
             <div className="flex items-center gap-2">
               <ShoppingBag className="text-red-500" size={24} />

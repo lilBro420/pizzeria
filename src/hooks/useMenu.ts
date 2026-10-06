@@ -1,20 +1,46 @@
-import { useState } from 'react'
-import { MenuItem, Category } from '../types'
-import { MENU as INITIAL_MENU } from '../data/menu'
+import { useState, useEffect } from 'react'
+import { MenuItem } from '../types'
+import { api } from '../services/api'
 
 export interface MenuStore {
   items: MenuItem[]
+  loading: boolean
+  error: string | null
+  refreshMenu: () => Promise<void>
   addItem: (item: MenuItem) => void
-  updateItem: (id: string, updates: Partial<MenuItem>) => void
-  deleteItem: (id: string) => void
-  reorderItem: (id: string, newIndex: number) => void
+  updateItem: (id: string | number, updates: Partial<MenuItem>) => void
+  deleteItem: (id: string | number) => void
+  reorderItem: (id: string | number, newIndex: number) => void
 }
 
 export function useMenu(): MenuStore {
-  const [items, setItems] = useState<MenuItem[]>(INITIAL_MENU)
+  const [items, setItems] = useState<MenuItem[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  const loadMenu = async () => {
+    try {
+      setLoading(true)
+      const prods = await api.getProductos()
+      setItems(prods)
+      setError(null)
+    } catch (err: any) {
+      console.error('Error al cargar productos del backend:', err)
+      setError(err.message || 'Error al conectar con la base de datos')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    loadMenu()
+  }, [])
 
   return {
     items,
+    loading,
+    error,
+    refreshMenu: loadMenu,
     addItem: (item) => setItems(prev => [...prev, item]),
     updateItem: (id, updates) => setItems(prev => prev.map(i => (i.id === id ? { ...i, ...updates } : i))),
     deleteItem: (id) => setItems(prev => prev.filter(i => i.id !== id)),
@@ -30,3 +56,4 @@ export function useMenu(): MenuStore {
     }
   }
 }
+

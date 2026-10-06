@@ -48,13 +48,13 @@ export function Admin({ onLogout, ordersStore, menuStore }: AdminProps) {
   orders
     .filter(o => o.status !== 'cancelado')
     .forEach(o =>
-      o.items.forEach(i => sold.set(i.item.id, (sold.get(i.item.id) ?? 0) + i.qty))
+      o.items.forEach(i => sold.set(i.item.id as string, (sold.get(i.item.id as string) ?? 0) + i.qty))
     )
   const topProducts = [...sold.entries()]
     .sort((a, b) => b[1] - a[1])
     .slice(0, 5)
     .flatMap(([id, qty]) => {
-      const item = MENU.find(m => m.id === id)
+      const item = MENU.find(m => m.id === id || String(m.id) === id)
       return item ? [{ item, qty }] : []
     })
 

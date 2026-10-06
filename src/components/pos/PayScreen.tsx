@@ -42,7 +42,6 @@ export function PayScreen({
   const remaining = Math.max(0, total - totalPaid)
   const currentInputAmount = parseFloat(input) || 0
   
-  // Si ya se pagó todo, el cambio es el excedente
   const change = (totalPaid + currentInputAmount) - total
   
   const canConfirm = (totalPaid + currentInputAmount) >= total
@@ -77,7 +76,6 @@ export function PayScreen({
 
   const applyPayment = () => {
     if (currentInputAmount <= 0) {
-      // Si no ingresó monto, asume que paga lo restante con el método seleccionado
       if (remaining > 0) {
         setAppliedPayments([...appliedPayments, { method: payMethod, amount: remaining }])
       }
@@ -191,7 +189,6 @@ export function PayScreen({
         </div>
 
         <div className="flex gap-4 min-h-0 flex-1">
-          {/* Teclado */}
           <div className="w-1/2 flex flex-col min-h-0">
             <div className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-2">Teclado Numérico</div>
             <div className="grid grid-rows-4 gap-2 flex-1">
@@ -215,7 +212,6 @@ export function PayScreen({
             </div>
           </div>
           
-          {/* Billetes y Monedas (Solo si es efectivo) */}
           <div className="w-1/2 flex flex-col gap-4 overflow-y-auto">
             {payMethod === 'efectivo' ? (
               <>
@@ -271,7 +267,6 @@ export function PayScreen({
         </div>
       </div>
 
-      {/* Resumen Sidebar */}
       <div className="w-full md:w-80 shrink-0 flex flex-col bg-white border-l border-gray-200 shadow-2xl">
         <div className="p-5 border-b border-gray-100 bg-gray-50 shrink-0">
           <h3 className="font-black text-gray-900 uppercase tracking-widest">Pagos Aplicados</h3>
