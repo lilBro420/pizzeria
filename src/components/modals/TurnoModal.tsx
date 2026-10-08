@@ -62,7 +62,7 @@ export function TurnoModal({ usuario, onClose, onShiftClosed }: TurnoModalProps)
         efectivoContado: parseFloat(efectivoContado) || 0,
         notas: notas.trim() || null,
       })
-      alert('Turno cerrado correctamente.')
+      alert('✓ Turno cerrado correctamente y arqueo guardado.')
       if (onShiftClosed) onShiftClosed()
       onClose()
     } catch (err: any) {
@@ -73,64 +73,62 @@ export function TurnoModal({ usuario, onClose, onShiftClosed }: TurnoModalProps)
   }
 
   return (
-    <Dialog title="CONTROL DE TURNO Y CORTE DE CAJA" isOpen={true} onClose={onClose} maxWidth="max-w-2xl">
+    <Dialog title="CONTROL DE TURNO Y CAJA" isOpen={true} onClose={onClose} maxWidth="max-w-2xl">
       <div className="flex flex-col gap-3 select-none">
         {error && (
-          <div className="bg-[#FFEBEE] border border-[#D32F2F] text-[#B71C1C] p-2 text-xs font-bold swing-inset">
-            {error}
+          <div className="bg-rose-50 border border-rose-200 text-rose-700 p-3 rounded-xl text-xs font-bold flex items-center gap-2">
+            <span>⚠️</span>
+            <span>{error}</span>
           </div>
         )}
 
         {loading ? (
-          <div className="p-8 text-center font-bold text-gray-600">Cargando información del turno...</div>
+          <div className="p-8 text-center font-bold text-slate-500">Cargando información del turno...</div>
         ) : !turno ? (
           /* Shift not opened yet */
-          <div className="swing-inset bg-white p-4 flex flex-col gap-4">
-            <div>
-              <span className="text-base font-black text-[#0A246A] block mb-1">
-                NO HAY TURNO ABIERTO ACTUALMENTE
+          <div className="bg-white rounded-xl border border-slate-200 p-5 flex flex-col gap-4 shadow-sm">
+            <div className="bg-amber-50 border border-amber-200 p-3.5 rounded-xl text-amber-900">
+              <span className="text-base font-black block mb-1">
+                ⚠️ NO HAY TURNO ABIERTO ACTUALMENTE
               </span>
-              <p className="text-xs text-gray-600">
-                Para comenzar a cobrar y tomar pedidos con el usuario <b>{usuario.nombre}</b>, debes registrar el
-                fondo de apertura de caja.
+              <p className="text-xs text-amber-800">
+                Para comenzar a cobrar y procesar pedidos en caja con el usuario <b>{usuario.nombre}</b>, debes ingresar el fondo inicial de efectivo.
               </p>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="block text-xs font-bold text-gray-700 uppercase mb-1">
+                <label className="block text-xs font-extrabold text-slate-700 uppercase tracking-wider mb-1">
                   Fondo Inicial de Caja ($ MXN):
                 </label>
                 <input
                   type="text"
                   value={fondoInicial}
                   onChange={e => setFondoInicial(e.target.value)}
-                  className="w-full h-12 px-3 text-2xl font-mono font-bold bg-[#ECE9D8] swing-inset outline-none text-black"
+                  className="w-full h-12 px-3.5 text-2xl font-mono font-black bg-slate-50 rounded-xl border border-slate-300 outline-none focus:ring-2 focus:ring-blue-500 text-slate-900"
                 />
 
-                <div className="mt-2 grid grid-cols-3 gap-1">
+                <div className="mt-2.5 grid grid-cols-3 gap-2">
                   {[200, 500, 1000].map(amt => (
-                    <Button
+                    <button
                       key={amt}
-                      size="sm"
-                      variant="default"
+                      type="button"
                       onClick={() => setFondoInicial(String(amt))}
-                      className="text-xs font-bold"
+                      className="py-2 rounded-lg bg-slate-100 hover:bg-slate-200 font-bold text-xs text-slate-700 border border-slate-200 active:scale-95 transition-all"
                     >
                       ${amt}
-                    </Button>
+                    </button>
                   ))}
                 </div>
 
-                <div className="mt-4">
-                  <Button
-                    size="lg"
-                    variant="success"
+                <div className="mt-5">
+                  <button
+                    type="button"
                     onClick={handleAbrir}
-                    className="w-full text-base font-black tracking-wider py-3"
+                    className="w-full py-3.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-base shadow-md shadow-emerald-500/20 active:scale-98 transition-all cursor-pointer"
                   >
-                    ABRIR TURNO AHORA
-                  </Button>
+                    ✓ ABRIR TURNO AHORA
+                  </button>
                 </div>
               </div>
 
@@ -142,137 +140,138 @@ export function TurnoModal({ usuario, onClose, onShiftClosed }: TurnoModalProps)
         ) : mode === 'view' ? (
           /* Active shift dashboard */
           <div className="flex flex-col gap-3">
-            <div className="swing-inset bg-white p-3 grid grid-cols-3 gap-2 text-xs">
+            <div className="bg-white rounded-xl border border-slate-200 p-4 grid grid-cols-3 gap-2 text-xs shadow-sm">
               <div>
-                <span className="text-gray-500 block">Turno ID:</span>
-                <span className="font-mono font-bold text-black">#{turno.id}</span>
+                <span className="text-slate-400 font-semibold block">Turno ID:</span>
+                <span className="font-mono font-black text-sm text-slate-900">#{turno.id}</span>
               </div>
               <div>
-                <span className="text-gray-500 block">Apertura:</span>
-                <span className="font-bold text-black">{formatFecha(turno.apertura)}</span>
+                <span className="text-slate-400 font-semibold block">Apertura:</span>
+                <span className="font-bold text-slate-900">{formatFecha(turno.apertura)}</span>
               </div>
               <div>
-                <span className="text-gray-500 block">Fondo Inicial:</span>
-                <span className="font-mono font-black text-black">{fmt(turno.fondoInicial)}</span>
+                <span className="text-slate-400 font-semibold block">Fondo Inicial:</span>
+                <span className="font-mono font-black text-sm text-emerald-600">{fmt(turno.fondoInicial)}</span>
               </div>
             </div>
 
             {/* Sales by method breakdown */}
-            <div className="swing-inset bg-white p-3">
-              <span className="text-xs font-bold text-gray-700 uppercase tracking-wider block mb-2">
+            <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm">
+              <span className="text-xs font-extrabold text-slate-700 uppercase tracking-wider block mb-2.5">
                 Ventas de este Turno:
               </span>
-              <div className="space-y-1.5">
+              <div className="space-y-2">
                 {turno.ventasPorMetodo.map(m => (
-                  <div key={m.metodo} className="flex justify-between items-baseline text-xs pb-1 border-b border-gray-100">
-                    <span className="font-bold uppercase text-gray-700">
+                  <div key={m.metodo} className="flex justify-between items-baseline text-xs pb-1.5 border-b border-slate-100">
+                    <span className="font-bold uppercase text-slate-600">
                       {m.metodo} ({m.pagos} {m.pagos === 1 ? 'pago' : 'pagos'})
                     </span>
-                    <span className="font-mono font-black text-sm text-black">{fmt(m.total)}</span>
+                    <span className="font-mono font-black text-sm text-slate-900">{fmt(m.total)}</span>
                   </div>
                 ))}
-                <div className="flex justify-between items-baseline pt-1">
-                  <span className="font-black text-sm text-black">TOTAL VENTAS COBRADAS:</span>
-                  <span className="font-mono text-xl font-black text-[#0A246A]">
+                <div className="flex justify-between items-baseline pt-2">
+                  <span className="font-black text-sm text-slate-900">TOTAL VENTAS COBRADAS:</span>
+                  <span className="font-mono text-xl font-black text-blue-700">
                     {fmt(turno.totalVentas)}
                   </span>
                 </div>
               </div>
             </div>
 
-            {/* Expected cash in drawer */}
-            <div className="swing-inset bg-[#E8F5E9] border border-green-700 p-3 flex justify-between items-center text-green-900 font-bold">
+            {/* Shift expected balance */}
+            <div className="bg-emerald-50 rounded-xl border border-emerald-200 p-4 flex justify-between items-center text-emerald-950 shadow-sm">
               <div>
-                <span className="text-sm block">EFECTIVO ESPERADO EN CAJA:</span>
-                <span className="text-[11px] text-green-800 font-normal">
-                  (Fondo Inicial + Ventas en Efectivo)
+                <span className="text-xs font-extrabold uppercase tracking-wide block text-emerald-700">
+                  Efectivo Esperado en Caja:
+                </span>
+                <span className="text-[11px] text-emerald-800">
+                  Fondo ({fmt(turno.fondoInicial)}) + Ventas en efectivo
                 </span>
               </div>
-              <span className="text-3xl font-mono font-black">{fmt(turno.efectivoEsperado)}</span>
+              <span className="text-3xl font-mono font-black text-emerald-700">
+                {fmt(turno.efectivoEsperado)}
+              </span>
             </div>
 
-            <div className="flex justify-between items-center pt-2 border-t border-[#808080]">
-              <Button size="md" variant="default" onClick={onClose} className="px-6 font-bold">
-                VOLVER
+            {/* Action buttons */}
+            <div className="flex justify-between items-center pt-2">
+              <Button size="md" variant="default" onClick={onClose}>
+                CERRAR VENTANA
               </Button>
-
               <div className="flex gap-2">
                 <Button
                   size="md"
                   variant="primary"
-                  onClick={() => alert(`Corte Parcial impreso en ticket:\nVentas: ${fmt(turno.totalVentas)}\nEfectivo esperado: ${fmt(turno.efectivoEsperado)}`)}
-                  className="font-black"
+                  onClick={() => alert(`Corte Parcial (X):\nTotal Ventas: ${fmt(turno.totalVentas)}\nEfectivo Esperado: ${fmt(turno.efectivoEsperado)}`)}
                 >
-                  CORTE PARCIAL (X)
+                  IMPRIMIR CORTE X
                 </Button>
-
                 <Button
                   size="md"
                   variant="danger"
                   onClick={() => setMode('close')}
-                  className="font-black px-6"
                 >
-                  CERRAR TURNO (Z)
+                  CERRAR TURNO (CORTE Z)
                 </Button>
               </div>
             </div>
           </div>
         ) : (
-          /* Close shift form */
-          <div className="swing-inset bg-white p-3 flex flex-col gap-3">
-            <div className="bg-[#FFEBEE] p-2 text-xs font-bold text-[#B71C1C]">
-              ARQUEO DE CAJA: Cuenta el dinero físico que hay en el cajón e ingrésalo abajo.
-            </div>
+          /* Closing shift / Arqueo screen */
+          <div className="bg-white rounded-xl border border-slate-200 p-5 flex flex-col gap-4 shadow-sm">
+            <span className="text-base font-black text-slate-900 block">
+              ARQUEO DE CAJA Y CIERRE FINAL (CORTE Z)
+            </span>
 
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-xs font-bold text-gray-700 uppercase mb-1">
-                  Efectivo Contado en Caja ($):
-                </label>
-                <input
-                  type="text"
-                  value={efectivoContado}
-                  onChange={e => setEfectivoContado(e.target.value)}
-                  placeholder="0.00"
-                  className="w-full h-12 px-3 text-2xl font-mono font-bold bg-[#ECE9D8] swing-inset outline-none text-black mb-2"
-                />
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="flex flex-col gap-3">
+                <div>
+                  <label className="block text-xs font-extrabold text-slate-700 uppercase tracking-wider mb-1">
+                    Efectivo Contado en Caja ($ MXN):
+                  </label>
+                  <input
+                    type="text"
+                    value={efectivoContado}
+                    onChange={e => setEfectivoContado(e.target.value)}
+                    placeholder="Monto real en el cajón"
+                    className="w-full h-12 px-3.5 text-2xl font-mono font-black bg-slate-50 rounded-xl border border-slate-300 outline-none focus:ring-2 focus:ring-blue-500 text-slate-900"
+                  />
+                </div>
 
                 {efectivoContado && (
-                  <div className="p-2 text-xs font-bold border swing-inset mb-2">
-                    {parseFloat(efectivoContado) >= turno.efectivoEsperado ? (
-                      <span className="text-green-800">
-                        Sobrante: {fmt(parseFloat(efectivoContado) - turno.efectivoEsperado)}
-                      </span>
-                    ) : (
-                      <span className="text-red-800">
-                        Faltante: {fmt(turno.efectivoEsperado - parseFloat(efectivoContado))}
-                      </span>
-                    )}
+                  <div className="p-3 rounded-xl bg-slate-100 text-xs font-bold flex justify-between items-center">
+                    <span>Diferencia de caja:</span>
+                    <span
+                      className={`font-mono text-base font-black ${
+                        parseFloat(efectivoContado) >= turno.efectivoEsperado
+                          ? 'text-emerald-600'
+                          : 'text-rose-600'
+                      }`}
+                    >
+                      {fmt(parseFloat(efectivoContado) - turno.efectivoEsperado)}
+                    </span>
                   </div>
                 )}
 
-                <label className="block text-xs font-bold text-gray-700 uppercase mb-1">
-                  Notas / Observaciones del Cierre:
-                </label>
-                <input
-                  type="text"
-                  value={notas}
-                  onChange={e => setNotas(e.target.value)}
-                  placeholder="Opcional..."
-                  className="w-full h-10 px-2 text-xs bg-[#ECE9D8] swing-inset outline-none font-bold"
-                />
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                    Notas u observaciones:
+                  </label>
+                  <input
+                    type="text"
+                    value={notas}
+                    onChange={e => setNotas(e.target.value)}
+                    placeholder="Ej. Sobraron 2 pesos, billete falso retenido..."
+                    className="w-full h-11 px-3 text-sm bg-slate-50 rounded-xl border border-slate-300 outline-none focus:ring-2 focus:ring-blue-500 text-slate-900"
+                  />
+                </div>
 
-                <div className="flex gap-2 mt-4">
+                <div className="flex gap-2 mt-2">
                   <Button size="md" variant="default" onClick={() => setMode('view')}>
-                    REGRESAR
+                    CANCELAR
                   </Button>
-                  <Button
-                    size="md"
-                    variant="danger"
-                    onClick={handleCerrar}
-                    className="flex-1 font-black text-base"
-                  >
-                    CONFIRMAR CIERRE (Z)
+                  <Button size="md" variant="danger" onClick={handleCerrar} className="flex-1">
+                    CONFIRMAR Y CERRAR TURNO
                   </Button>
                 </div>
               </div>

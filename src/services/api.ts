@@ -16,7 +16,7 @@ import {
   UsuarioActual,
 } from '../types'
 
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3001/api'
+const API_BASE = import.meta.env.VITE_API_URL || '/api'
 
 let authToken: string | null = localStorage.getItem('pos_token')
 
@@ -40,10 +40,20 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
     headers.set('Authorization', `Bearer ${authToken}`)
   }
 
-  const res = await fetch(`${API_BASE}${path}`, {
-    ...options,
-    headers,
-  })
+  let res: Response
+  try {
+    res = await fetch(`${API_BASE}${path}`, {
+      ...options,
+      headers,
+    })
+  } catch (err: any) {
+    console.error('Error de red al conectar con API:', err)
+    const msg = (err?.message || '').toLowerCase()
+    if (msg.includes('load failed') || msg.includes('failed to fetch') || msg.includes('networkerror')) {
+      throw new Error('No se pudo conectar con el servidor backend. Verifica que esté activo en el puerto 3001.')
+    }
+    throw err
+  }
 
   let data: any = null
   try {
@@ -285,7 +295,7 @@ export const api = {
       notas?: string | null
     }[]
     pagos?: {
-      metodo: 'efectivo' | 'tarjeta' | 'transferencia'
+      metodo: 'efectivo' | 'dolares' | 'tarjeta' | 'transferencia'
       monto: number
       montoRecibido?: number | null
     }[] | null
@@ -303,7 +313,7 @@ export const api = {
     id: number,
     payload: {
       pagos: {
-        metodo: 'efectivo' | 'tarjeta' | 'transferencia'
+        metodo: 'efectivo' | 'dolares' | 'tarjeta' | 'transferencia'
         monto: number
         montoRecibido?: number | null
       }[]

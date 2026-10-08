@@ -10,12 +10,11 @@ import { adminRouter, cocinaRouter, turnosRouter } from './src/routes/operacion.
 const app = express()
 app.disable('x-powered-by')
 
-// CORS: localhost, redes privadas (tablets en la LAN) y orígenes extra de CORS_EXTRA_ORIGINS
-const extra = (process.env.CORS_EXTRA_ORIGINS || '').split(',').map(s => s.trim()).filter(Boolean)
-const LOCAL = /^https?:\/\/(localhost|127\.0\.0\.1|10\.\d+\.\d+\.\d+|192\.168\.\d+\.\d+|172\.(1[6-9]|2\d|3[01])\.\d+\.\d+)(:\d+)?$/
+// CORS: Permitir cualquier origen en entorno de desarrollo / red POS
 app.use(
   cors({
-    origin: (origin, cb) => cb(null, !origin || LOCAL.test(origin) || extra.includes(origin)),
+    origin: true,
+    credentials: true,
   })
 )
 app.use(express.json({ limit: '200kb' }))

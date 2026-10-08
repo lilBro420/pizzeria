@@ -100,7 +100,7 @@ export function normalizePagos(pagos, totalCents, propina = 0) {
   const rows = pagos.map(p => {
     const monto = cents(p.monto)
     let recibido = p.montoRecibido != null ? cents(p.montoRecibido) : monto
-    if (p.metodo !== 'efectivo') recibido = monto
+    if (p.metodo !== 'efectivo' && p.metodo !== 'dolares') recibido = monto
     if (recibido < monto) throw new HttpError(400, 'El monto recibido no puede ser menor al monto aplicado')
     return { metodo: p.metodo, monto, recibido, cambio: recibido - monto, propina: 0 }
   })

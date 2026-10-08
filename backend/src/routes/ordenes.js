@@ -162,7 +162,7 @@ ordenesRouter.get(
 )
 
 // ─── Crear orden ────────────────────────────────────────────────────
-const METODOS = ['efectivo', 'tarjeta', 'transferencia']
+const METODOS = ['efectivo', 'tarjeta', 'transferencia', 'dolares']
 const itemSchema = z
   .object({
     idProducto: z.number().int().positive().nullish(),
@@ -218,8 +218,14 @@ ordenesRouter.post(
     if (b.descuentoPct > 0 && !hasPerm(user, 'descuentos')) {
       throw new HttpError(403, 'No tienes permiso para aplicar descuentos')
     }
-    if (b.pagos?.length && !hasPerm(user, 'cobrar')) {
-      throw new HttpError(403, 'No tienes permiso para cobrar')
+    if (b.pagos?.length) {
+      if (!hasPerm(user, 'cobrar')) {
+        throw new HttpError(403, 'No tienes permiso para cobrar')
+      }
+      const tOpen = await pool.query('SELECT 1 FROM public.turnos WHERE id_empleado = $1 AND cierre IS NULL', [user.id])
+      if (!tOpen.rowCount) {
+        throw new HttpError(400, 'No tienes un turno de caja abierto. Abre tu turno antes de cobrar.')
+      }
     }
 
     const idOrden = await tx(async c => {
@@ -335,6 +341,11 @@ ordenesRouter.post(
     const b = z.object({ pagos: z.array(pagoSchema).min(1).max(6), propina: z.number().min(0).max(100000).default(0) }).parse(req.body)
 
     await tx(async c => {
+      const tOpen = await c.query('SELECT 1 FROM public.turnos WHERE id_empleado = $1 AND cierre IS NULL', [req.user.id])
+      if (!tOpen.rowCount) {
+        throw new HttpError(400, 'No tienes un turno de caja abierto. Abre tu turno antes de cobrar.')
+      }
+
       const r = await c.query('SELECT id_orden, folio, estado_actual, total FROM public.ordenes WHERE id_orden = $1 FOR UPDATE', [idOrden])
       const o = r.rows[0]
       if (!o) throw new HttpError(404, 'Orden no encontrada')

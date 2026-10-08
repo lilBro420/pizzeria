@@ -25,7 +25,7 @@ export interface UsuarioActual {
 
 export type TipoOrden = 'local' | 'llevar' | 'recoger' | 'domicilio'
 export type EstadoOrden = 'abierta' | 'cerrada' | 'cancelada'
-export type MetodoPago = 'efectivo' | 'tarjeta' | 'transferencia' | 'mixto'
+export type MetodoPago = 'efectivo' | 'dolares' | 'tarjeta' | 'transferencia' | 'mixto'
 export type PizzaTamano = 'Chica' | 'Mediana' | 'Grande'
 export type PizzaMasa = 'Delgada' | 'Gruesa' | 'Orilla Rellena'
 

@@ -68,6 +68,9 @@ export function OrderTypeModal({
   const isRecoger = tipo === 'recoger'
   const isDomicilio = tipo === 'domicilio'
 
+  // Regla: Domicilio y Recoger van a espera; Comer Aquí y Llevar van a cobro directo
+  const isEsperaService = isRecoger || isDomicilio
+
   const isValid =
     (tipo === 'local' ? mesa.trim().length > 0 : true) &&
     (isRecoger ? phone.length >= 10 && name.trim().length > 0 : true) &&
@@ -94,48 +97,61 @@ export function OrderTypeModal({
   }
 
   return (
-    <Dialog title="TIPO DE ORDEN Y DESTINO" isOpen={true} onClose={onClose} maxWidth="max-w-2xl">
+    <Dialog title="DESTINO DEL PEDIDO" isOpen={true} onClose={onClose} maxWidth="max-w-2xl">
       <div className="flex flex-col gap-4 select-none">
         {/* Type selection buttons */}
-        <div className="grid grid-cols-4 gap-2">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
           {(
             [
-              { t: 'local', label: 'COMER AQUÍ' },
-              { t: 'llevar', label: 'PARA LLEVAR' },
-              { t: 'recoger', label: 'RECOGER' },
-              { t: 'domicilio', label: 'DOMICILIO' },
+              { t: 'local', label: 'COMER AQUÍ', sub: 'Mesa en restaurante' },
+              { t: 'llevar', label: 'PARA LLEVAR', sub: 'Mostrador directo' },
+              { t: 'recoger', label: 'RECOGER', sub: 'Pedido por teléfono' },
+              { t: 'domicilio', label: 'DOMICILIO', sub: 'Envío con repartidor' },
             ] as const
-          ).map(opt => (
-            <Button
-              key={opt.t}
-              size="lg"
-              variant={tipo === opt.t ? 'primary' : 'default'}
-              onClick={() => {
-                setTipo(opt.t)
-                if (opt.t === 'local' || opt.t === 'llevar') {
-                  setActiveInput('mesa')
-                  setKeyboardMode('num')
-                } else {
-                  setActiveInput('phone')
-                  setKeyboardMode('num')
-                }
-              }}
-              className="text-base font-black py-3"
-            >
-              {opt.label}
-            </Button>
-          ))}
+          ).map(opt => {
+            const isSel = tipo === opt.t
+            return (
+              <button
+                key={opt.t}
+                type="button"
+                onClick={() => {
+                  setTipo(opt.t)
+                  if (opt.t === 'local' || opt.t === 'llevar') {
+                    setActiveInput('mesa')
+                    setKeyboardMode('num')
+                  } else {
+                    setActiveInput('phone')
+                    setKeyboardMode('num')
+                  }
+                }}
+                className={`p-3 rounded-xl border-2 flex flex-col items-center justify-center transition-all active:scale-95 ${
+                  isSel
+                    ? 'bg-blue-600 text-white border-blue-700 shadow-md shadow-blue-500/25 ring-2 ring-blue-400/50'
+                    : 'bg-white text-slate-800 border-slate-200 hover:border-slate-300 hover:bg-slate-50'
+                }`}
+              >
+                <span className="text-sm sm:text-base font-black tracking-tight">{opt.label}</span>
+                <span
+                  className={`text-[11px] mt-0.5 font-medium ${
+                    isSel ? 'text-blue-100' : 'text-slate-500'
+                  }`}
+                >
+                  {opt.sub}
+                </span>
+              </button>
+            )
+          })}
         </div>
 
         {/* Content depending on order type */}
         {isLocalOrLlevar && (
-          <div className="flex flex-col gap-3 swing-inset bg-white p-3">
+          <div className="flex flex-col gap-3 bg-white rounded-xl border border-slate-200 p-3.5 shadow-sm">
             <div className="flex justify-between items-center">
-              <label className="text-sm font-bold text-gray-800 uppercase tracking-wide">
-                Número de Mesa o Referencia:
+              <label className="text-xs font-black text-slate-700 uppercase tracking-wider">
+                {tipo === 'local' ? 'Número de Mesa:' : 'Referencia / Identificador (Opcional):'}
               </label>
               {tipo === 'local' && (
-                <span className="text-xs font-bold text-red-700 bg-red-100 px-2 py-0.5 border border-red-300">
+                <span className="text-xs font-black text-rose-600 bg-rose-50 px-2.5 py-0.5 rounded-full border border-rose-200">
                   REQUERIDO
                 </span>
               )}
@@ -150,8 +166,8 @@ export function OrderTypeModal({
                   setKeyboardMode('num')
                 }}
                 onChange={e => setMesa(e.target.value)}
-                placeholder="Ej. Mesa 4, Barra, Terraza..."
-                className="flex-1 h-12 px-3 text-xl font-bold bg-[#ECE9D8] swing-inset outline-none text-black"
+                placeholder={tipo === 'local' ? 'Ej. Mesa 4, Terraza 2...' : 'Ej. Juan, Barra...'}
+                className="flex-1 h-12 px-3.5 text-xl font-black bg-slate-50 rounded-xl border border-slate-300 outline-none focus:ring-2 focus:ring-blue-500 text-slate-900"
               />
               <Button size="md" variant="default" onClick={() => setMesa('')}>
                 LIMPIAR
@@ -160,31 +176,37 @@ export function OrderTypeModal({
 
             {/* Quick table selector */}
             <div>
-              <div className="text-xs font-bold text-gray-600 uppercase mb-1">
+              <div className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">
                 Selección Rápida de Mesas:
               </div>
-              <div className="grid grid-cols-6 gap-2">
-                {mesas.map(m => (
-                  <Button
-                    key={m.id}
-                    size="sm"
-                    variant={mesa === m.nombre ? 'primary' : 'default'}
-                    onClick={() => setMesa(m.nombre)}
-                    className="font-black text-base py-2"
-                  >
-                    Mesa {m.nombre}
-                  </Button>
-                ))}
+              <div className="grid grid-cols-4 sm:grid-cols-6 gap-2">
+                {mesas.map(m => {
+                  const isSel = mesa === m.nombre
+                  return (
+                    <button
+                      key={m.id}
+                      type="button"
+                      onClick={() => setMesa(m.nombre)}
+                      className={`h-12 rounded-xl font-black text-sm transition-all active:scale-95 border ${
+                        isSel
+                          ? 'bg-blue-600 text-white border-blue-700 shadow-sm ring-2 ring-blue-400'
+                          : 'bg-slate-50 hover:bg-slate-100 text-slate-800 border-slate-200'
+                      }`}
+                    >
+                      Mesa {m.nombre}
+                    </button>
+                  )
+                })}
               </div>
             </div>
           </div>
         )}
 
         {(isRecoger || isDomicilio) && (
-          <div className="flex flex-col gap-3 swing-inset bg-white p-3">
-            <div className="grid grid-cols-2 gap-3">
+          <div className="flex flex-col gap-3 bg-white rounded-xl border border-slate-200 p-3.5 shadow-sm">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs font-bold text-gray-800 uppercase mb-1">
+                <label className="block text-xs font-black text-slate-700 uppercase tracking-wider mb-1">
                   Teléfono (10 dígitos):
                 </label>
                 <input
@@ -197,18 +219,18 @@ export function OrderTypeModal({
                   }}
                   onChange={e => handlePhoneChange(e.target.value)}
                   placeholder="Ej. 5551234567"
-                  className="w-full h-11 px-3 text-lg font-mono font-bold bg-[#ECE9D8] swing-inset outline-none text-black"
+                  className="w-full h-12 px-3.5 text-lg font-mono font-black bg-slate-50 rounded-xl border border-slate-300 outline-none focus:ring-2 focus:ring-blue-500 text-slate-900"
                 />
-                {searching && <span className="text-xs text-blue-700 font-bold mt-1 block">Buscando...</span>}
+                {searching && <span className="text-xs text-blue-600 font-bold mt-1 block">Buscando cliente...</span>}
                 {foundClient && (
-                  <span className="text-xs text-green-700 font-bold mt-1 block">
+                  <span className="text-xs text-emerald-600 font-bold mt-1 block">
                     ✓ Cliente registrado: {foundClient.nombre}
                   </span>
                 )}
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-gray-800 uppercase mb-1">
+                <label className="block text-xs font-black text-slate-700 uppercase tracking-wider mb-1">
                   Nombre del Cliente:
                 </label>
                 <input
@@ -220,15 +242,15 @@ export function OrderTypeModal({
                   }}
                   onChange={e => setName(e.target.value)}
                   placeholder="Nombre y apellido"
-                  className="w-full h-11 px-3 text-base font-bold bg-[#ECE9D8] swing-inset outline-none text-black"
+                  className="w-full h-12 px-3.5 text-base font-bold bg-slate-50 rounded-xl border border-slate-300 outline-none focus:ring-2 focus:ring-blue-500 text-slate-900"
                 />
               </div>
             </div>
 
             {isDomicilio && (
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-bold text-gray-800 uppercase mb-1">
+                  <label className="block text-xs font-black text-slate-700 uppercase tracking-wider mb-1">
                     Dirección de Entrega:
                   </label>
                   <input
@@ -240,12 +262,12 @@ export function OrderTypeModal({
                     }}
                     onChange={e => setAddress(e.target.value)}
                     placeholder="Calle, número, colonia"
-                    className="w-full h-11 px-3 text-base font-bold bg-[#ECE9D8] swing-inset outline-none text-black"
+                    className="w-full h-12 px-3.5 text-base font-bold bg-slate-50 rounded-xl border border-slate-300 outline-none focus:ring-2 focus:ring-blue-500 text-slate-900"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-gray-800 uppercase mb-1">
+                  <label className="block text-xs font-black text-slate-700 uppercase tracking-wider mb-1">
                     Referencias:
                   </label>
                   <input
@@ -257,7 +279,7 @@ export function OrderTypeModal({
                     }}
                     onChange={e => setReferencias(e.target.value)}
                     placeholder="Entre calles, color de fachada"
-                    className="w-full h-11 px-3 text-base font-bold bg-[#ECE9D8] swing-inset outline-none text-black"
+                    className="w-full h-12 px-3.5 text-base font-bold bg-slate-50 rounded-xl border border-slate-300 outline-none focus:ring-2 focus:ring-blue-500 text-slate-900"
                   />
                 </div>
               </div>
@@ -267,7 +289,7 @@ export function OrderTypeModal({
 
         {/* On-screen keyboard if enabled */}
         {keyboardMode === 'num' && (
-          <div className="pt-2 border-t border-[#808080]">
+          <div className="pt-2 border-t border-slate-200">
             <NumPad
               value={activeInput === 'mesa' ? mesa : phone}
               onChange={val => {
@@ -280,7 +302,7 @@ export function OrderTypeModal({
         )}
 
         {keyboardMode === 'alpha' && (
-          <div className="pt-2 border-t border-[#808080]">
+          <div className="pt-2 border-t border-slate-200">
             <VirtualKeyboard
               value={
                 activeInput === 'name'
@@ -301,35 +323,37 @@ export function OrderTypeModal({
           </div>
         )}
 
-        {/* Action Buttons */}
-        <div className="flex items-center justify-between gap-3 pt-3 border-t border-[#808080]">
+        {/* Action Buttons: Regla estricta del usuario */}
+        <div className="flex items-center justify-between gap-3 pt-3 border-t border-slate-200">
           <Button size="lg" variant="default" onClick={onClose}>
             CANCELAR
           </Button>
 
-          <div className="flex gap-2">
+          {isEsperaService ? (
+            /* Solo ENVIAR A ESPERA para Domicilio y Recoger */
             <Button
               size="lg"
               variant="warning"
               disabled={!isValid}
               onClick={() => handleFinish(false)}
-              className="text-base font-black px-4"
+              className="text-base font-black px-6 shadow-md shadow-amber-500/20"
               title="Envía la comanda a cocina y deja la cuenta pendiente de cobro"
             >
-              ENVIAR A ESPERA
+              ENVIAR A ESPERA (COCINA)
             </Button>
-
+          ) : (
+            /* Solo COBRAR AHORA para Comer Aquí (Local) y Llevar */
             <Button
               size="lg"
               variant="success"
               disabled={!isValid}
               onClick={() => handleFinish(true)}
-              className="text-base font-black px-6"
+              className="text-base font-black px-8 shadow-md shadow-emerald-500/20"
               title="Abre la pantalla de cobro para pagar ahora"
             >
               COBRAR AHORA
             </Button>
-          </div>
+          )}
         </div>
       </div>
     </Dialog>

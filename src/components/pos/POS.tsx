@@ -34,6 +34,7 @@ export function POS({ usuario, onLogout, onGoCocina, onGoAdmin }: POSProps) {
   // Catálogo y estado de datos
   const [catalogo, setCatalogo] = useState<Catalogo | null>(null)
   const [ordenes, setOrdenes] = useState<Orden[]>([])
+  const [turnoActual, setTurnoActual] = useState<any | null>(null)
   const [loading, setLoading] = useState(true)
 
   // Categoría seleccionada ('todo' o id_categoria)
@@ -43,6 +44,9 @@ export function POS({ usuario, onLogout, onGoCocina, onGoAdmin }: POSProps) {
   const [cart, setCart] = useState<DetalleOrden[]>([])
   const [descuentoPct, setDescuentoPct] = useState(0)
   const [comentariosOrden, setComentariosOrden] = useState('')
+
+  // Responsividad: pestaña móvil activa ('menu' | 'cart') para pantallas < md
+  const [mobileTab, setMobileTab] = useState<'menu' | 'cart'>('menu')
 
   // Modales
   const [customizingProduct, setCustomizingProduct] = useState<{
@@ -74,12 +78,17 @@ export function POS({ usuario, onLogout, onGoCocina, onGoAdmin }: POSProps) {
     folio?: string
   } | null>(null)
 
-  // Carga inicial y sondeo de órdenes abiertas
+  // Carga inicial y sondeo de órdenes abiertas y turno
   const loadData = async () => {
     try {
-      const [catData, ordData] = await Promise.all([api.getCatalogo(), api.getOrdenes({ limit: 100 })])
+      const [catData, ordData, turnoData] = await Promise.all([
+        api.getCatalogo(),
+        api.getOrdenes({ limit: 100 }),
+        api.getTurnoActual().catch(() => null),
+      ])
       setCatalogo(catData)
       setOrdenes(ordData)
+      setTurnoActual(turnoData)
     } catch (err: any) {
       console.error('Error al sincronizar POS:', err)
     } finally {
@@ -102,10 +111,11 @@ export function POS({ usuario, onLogout, onGoCocina, onGoAdmin }: POSProps) {
 
   if (loading || !catalogo) {
     return (
-      <div className="h-screen w-screen flex flex-col items-center justify-center bg-[#D4D0C8] text-black font-bold select-none">
-        <div className="p-8 swing-outset bg-[#ECE9D8] text-center border-2 border-black">
-          <span className="text-xl block mb-2 text-[#0A246A]">PIZZERÍA VOLCÁN — POS</span>
-          <span className="text-sm text-gray-700">Cargando catálogo y mesas desde el servidor...</span>
+      <div className="h-screen w-screen flex flex-col items-center justify-center bg-slate-100 text-slate-800 font-bold select-none">
+        <div className="p-8 bg-white rounded-2xl shadow-xl border border-slate-200 text-center flex flex-col items-center gap-3">
+          <div className="w-10 h-10 border-4 border-blue-600 border-t-transparent rounded-full animate-spin" />
+          <span className="text-xl font-black text-slate-900">PIZZERÍA VOLCÁN — POS</span>
+          <span className="text-sm text-slate-500">Cargando catálogo, mesas y turnos...</span>
         </div>
       </div>
     )
@@ -161,6 +171,7 @@ export function POS({ usuario, onLogout, onGoCocina, onGoAdmin }: POSProps) {
     setCustomizingProduct(null)
   }
 
+  // Manejo de paquetes
   const handleAddPaquete = (paq: any) => {
     const line: DetalleOrden = {
       uid: uid(),
@@ -174,8 +185,10 @@ export function POS({ usuario, onLogout, onGoCocina, onGoAdmin }: POSProps) {
     setCart([...cart, line])
   }
 
+  // Comanda protegida: no se permite alterar cantidad en el carrito, solo notas o eliminar
   const handleRemoveCartItem = (index: number) => {
-    setCart(cart.filter((_, idx) => idx !== index))
+    const updated = cart.filter((_, idx) => idx !== index)
+    setCart(updated)
   }
 
   const handleSaveItemNote = (index: number) => {
@@ -189,7 +202,7 @@ export function POS({ usuario, onLogout, onGoCocina, onGoAdmin }: POSProps) {
   // Flujo al hacer clic en "PAGAR CUENTA"
   const handleStartPay = () => {
     if (cart.length === 0) {
-      alert('Agrega al menos un producto a la orden antes de continuar.')
+      alert('Agrega al menos un producto a la comanda antes de continuar.')
       return
     }
     setShowOrderType(true)
@@ -204,6 +217,13 @@ export function POS({ usuario, onLogout, onGoCocina, onGoAdmin }: POSProps) {
     setShowOrderType(false)
 
     if (data.payNow) {
+      // Validación estricta: NO dejar cobrar sin turno abierto
+      if (!turnoActual) {
+        alert('⚠️ No tienes un turno de caja abierto. Debes abrir un turno para comenzar a cobrar.')
+        setShowTurno(true)
+        return
+      }
+
       // Abre pantalla de pago de inmediato
       setPayScreenState({
         isCart: true,
@@ -216,7 +236,7 @@ export function POS({ usuario, onLogout, onGoCocina, onGoAdmin }: POSProps) {
         impuesto,
       })
     } else {
-      // Envía directo a cuenta en espera (unpaid, sent to kitchen)
+      // Envía directo a cuenta en espera (unpaid, comanda mandada a cocina)
       try {
         setLoading(true)
         const payload = {
@@ -244,7 +264,7 @@ export function POS({ usuario, onLogout, onGoCocina, onGoAdmin }: POSProps) {
         }
 
         const ordenCreada = await api.createOrden(payload)
-        alert(`✓ Orden ${ordenCreada.folio} enviada a cocina (Cuenta en Espera).`)
+        alert(`✓ Comanda ${ordenCreada.folio} enviada a cocina (Cuenta en Espera).`)
         setCart([])
         setDescuentoPct(0)
         setComentariosOrden('')
@@ -258,8 +278,15 @@ export function POS({ usuario, onLogout, onGoCocina, onGoAdmin }: POSProps) {
   }
 
   // Confirmar cobro desde PayScreen
-  const handleConfirmPaymentFromPayScreen = async (pagosList: any[]) => {
+  const handleConfirmPaymentFromPayScreen = async (pagosList: any[], finalDescuentoPct = descuentoPct) => {
     if (!payScreenState) return
+
+    // Validación estricta de turno abierto
+    if (!turnoActual) {
+      alert('⚠️ No tienes un turno de caja abierto. Abre un turno antes de cobrar.')
+      setShowTurno(true)
+      return
+    }
 
     try {
       setLoading(true)
@@ -277,7 +304,7 @@ export function POS({ usuario, onLogout, onGoCocina, onGoAdmin }: POSProps) {
                 referencias: payScreenState.cliente.referencias,
               }
             : null,
-          descuentoPct,
+          descuentoPct: finalDescuentoPct,
           comentarios: comentariosOrden || null,
           items: cart.map(i => ({
             idProducto: i.idProducto,
@@ -292,7 +319,7 @@ export function POS({ usuario, onLogout, onGoCocina, onGoAdmin }: POSProps) {
         }
 
         const orden = await api.createOrden(payload)
-        alert(`✓ Orden ${orden.folio} cobrada exitosamente e impresa.`)
+        alert(`✓ Orden ${orden.folio} cobrada e impresa exitosamente.`)
         setCart([])
         setDescuentoPct(0)
         setComentariosOrden('')
@@ -316,6 +343,12 @@ export function POS({ usuario, onLogout, onGoCocina, onGoAdmin }: POSProps) {
 
   // Cobrar una cuenta en espera desde el modal
   const handlePayPendingOrder = (orden: Orden) => {
+    if (!turnoActual) {
+      alert('⚠️ No tienes un turno de caja abierto. Debes abrir un turno para comenzar a cobrar.')
+      setShowTurno(true)
+      return
+    }
+
     setShowPending(false)
     setPayScreenState({
       isCart: false,
@@ -355,20 +388,24 @@ export function POS({ usuario, onLogout, onGoCocina, onGoAdmin }: POSProps) {
         subtotal={payScreenState.subtotal}
         descuento={payScreenState.descuento}
         impuesto={payScreenState.impuesto}
+        descuentoPctInitial={descuentoPct}
         folio={payScreenState.folio}
         mesa={payScreenState.mesa}
         clienteNombre={payScreenState.cliente?.nombre}
+        ivaTasa={cfg.ivaTasa}
+        ivaIncluido={cfg.ivaIncluido}
         onConfirm={handleConfirmPaymentFromPayScreen}
         onSendToWaiting={
           payScreenState.isCart
-            ? () => {
-                handleConfirmOrderType({
-                  tipo: payScreenState.tipo,
-                  mesa: payScreenState.mesa,
-                  cliente: payScreenState.cliente,
+            ? async () => {
+                const ps = payScreenState
+                setPayScreenState(null)
+                await handleConfirmOrderType({
+                  tipo: ps.tipo,
+                  mesa: ps.mesa,
+                  cliente: ps.cliente,
                   payNow: false,
                 })
-                setPayScreenState(null)
               }
             : undefined
         }
@@ -385,114 +422,184 @@ export function POS({ usuario, onLogout, onGoCocina, onGoAdmin }: POSProps) {
   })
 
   return (
-    <div className="h-screen w-screen flex flex-col bg-[#D4D0C8] p-2 select-none overflow-hidden">
-      {/* ── Top Bar ── */}
-      <div className="bg-[#0A246A] text-white px-3 py-1.5 flex items-center justify-between border-2 border-black swing-outset shrink-0 mb-2">
+    <div className="h-screen w-screen flex flex-col bg-slate-100 p-2 sm:p-3 select-none overflow-hidden font-sans">
+      {/* ── Top Bar Moderna ── */}
+      <header className="bg-slate-900 text-white px-3 sm:px-4 py-2.5 rounded-2xl flex items-center justify-between shadow-md shrink-0 mb-2.5 border border-slate-800">
         <div className="flex items-center gap-3">
-          <span className="text-xl font-black tracking-wide font-sans">PIZZERÍA VOLCÁN</span>
-          <span className="text-xs bg-[#1F4E79] px-2 py-0.5 font-mono text-gray-200">
-            Cajero: {usuario.nombre} ({usuario.rol.toUpperCase()})
-          </span>
+          <div className="flex items-center gap-2">
+            <span className="text-lg sm:text-xl font-black tracking-tight text-white">PIZZERÍA VOLCÁN</span>
+            <span className="text-xs font-bold bg-blue-600 px-2 py-0.5 rounded-full text-white">POS</span>
+          </div>
+
+          <div className="hidden sm:flex items-center gap-2 text-xs">
+            <span className="bg-slate-800 text-slate-300 px-2.5 py-1 rounded-lg border border-slate-700 font-medium">
+              Cajero: <strong className="text-white">{usuario.nombre}</strong>
+            </span>
+
+            {/* Badge de Turno Obligatorio */}
+            {turnoActual ? (
+              <span className="bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-2.5 py-1 rounded-lg font-bold flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                Turno Abierto
+              </span>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setShowTurno(true)}
+                className="bg-rose-500/20 text-rose-300 border border-rose-500/40 px-2.5 py-1 rounded-lg font-bold flex items-center gap-1.5 hover:bg-rose-500/30 transition-all cursor-pointer"
+                title="Haz clic para abrir tu turno de caja"
+              >
+                <span className="w-2 h-2 rounded-full bg-rose-400" />
+                ⚠️ Turno Cerrado (Abrir Caja)
+              </button>
+            )}
+          </div>
         </div>
 
         <div className="flex items-center gap-2">
-          {/* Cuentas en Espera Button */}
-          <Button
-            size="sm"
-            variant="warning"
+          {/* Cuentas en Espera */}
+          <button
+            type="button"
             onClick={() => setShowPending(true)}
-            className="text-xs font-black py-1 px-3"
+            className="h-10 px-3.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-slate-950 font-black text-xs shadow-sm active:scale-95 transition-all flex items-center gap-1.5"
           >
-            CUENTAS EN ESPERA ({cuentasEnEspera.length})
-          </Button>
+            <span>ESPERA</span>
+            <span className="bg-slate-950 text-amber-300 px-1.5 py-0.2 rounded-md font-mono text-[11px]">
+              {cuentasEnEspera.length}
+            </span>
+          </button>
 
-          {/* Turno Button */}
-          <Button
-            size="sm"
-            variant="default"
+          {/* Turno / Arqueo */}
+          <button
+            type="button"
             onClick={() => setShowTurno(true)}
-            className="text-xs font-bold py-1 px-3"
+            className="h-10 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs border border-slate-700 active:scale-95 transition-all hidden sm:flex items-center"
           >
-            TURNO / CAJA
-          </Button>
+            TURNO
+          </button>
 
-          {/* Salir Button */}
-          <Button
-            size="sm"
-            variant="danger"
+          {/* Salir / Menú */}
+          <button
+            type="button"
             onClick={() => setShowExit(true)}
-            className="text-xs font-black py-1 px-3"
+            className="h-10 px-3.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-black text-xs shadow-sm active:scale-95 transition-all flex items-center"
           >
             SALIR
-          </Button>
+          </button>
         </div>
+      </header>
+
+      {/* Selector móvil de vista en pantallas estrechas (< md) */}
+      <div className="md:hidden flex gap-2 mb-2 shrink-0">
+        <button
+          type="button"
+          onClick={() => setMobileTab('menu')}
+          className={`flex-1 py-2 rounded-xl text-xs font-black border transition-all ${
+            mobileTab === 'menu'
+              ? 'bg-blue-600 text-white border-blue-700 shadow-sm'
+              : 'bg-white text-slate-700 border-slate-300'
+          }`}
+        >
+          🍽️ VER CATÁLOGO
+        </button>
+        <button
+          type="button"
+          onClick={() => setMobileTab('cart')}
+          className={`flex-1 py-2 rounded-xl text-xs font-black border transition-all flex items-center justify-center gap-1.5 ${
+            mobileTab === 'cart'
+              ? 'bg-blue-600 text-white border-blue-700 shadow-sm'
+              : 'bg-white text-slate-700 border-slate-300'
+          }`}
+        >
+          <span>🛒 COMANDA ({cart.length})</span>
+          <span className="font-mono text-emerald-600 font-black bg-emerald-50 px-1.5 py-0.5 rounded">
+            {fmt(total)}
+          </span>
+        </button>
       </div>
 
-      {/* ── Main Layout: Menu Left (62%), Cart Right (38%) ── */}
-      <div className="flex-1 grid grid-cols-12 gap-2 min-h-0">
+      {/* ── Main Layout Responsivo ── */}
+      <div className="flex-1 grid grid-cols-1 md:grid-cols-12 gap-2.5 min-h-0">
         {/* Left Side: Category Tabs & Products Grid */}
-        <div className="col-span-8 flex flex-col min-h-0 gap-2">
+        <div
+          className={`md:col-span-7 lg:col-span-8 flex flex-col min-h-0 gap-2 ${
+            mobileTab === 'menu' ? 'flex' : 'hidden md:flex'
+          }`}
+        >
           {/* Category Tabs Bar */}
-          <div className="flex gap-1.5 shrink-0 overflow-x-auto pb-1">
-            <Button
-              size="md"
-              variant="tab"
-              active={selectedCat === 'todo'}
+          <div className="flex gap-2 shrink-0 overflow-x-auto pb-1 scrollbar-none">
+            <button
+              type="button"
               onClick={() => setSelectedCat('todo')}
-              className="text-sm font-black min-w-[90px]"
+              className={`h-11 px-4 rounded-xl font-black text-xs uppercase tracking-wide shrink-0 transition-all active:scale-95 border ${
+                selectedCat === 'todo'
+                  ? 'bg-blue-600 text-white border-blue-700 shadow-sm shadow-blue-500/20'
+                  : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+              }`}
             >
               TODO
-            </Button>
+            </button>
 
-            {catalogo.categorias.map(cat => (
-              <Button
-                key={cat.id}
-                size="md"
-                variant="tab"
-                active={selectedCat === cat.id}
-                onClick={() => setSelectedCat(cat.id)}
-                className="text-sm font-black min-w-[100px]"
-                style={
-                  selectedCat === cat.id
-                    ? { borderTopColor: cat.color, borderTopWidth: '4px' }
-                    : {}
-                }
-              >
-                {cat.nombre.toUpperCase()}
-              </Button>
-            ))}
+            {catalogo.categorias.map(cat => {
+              const isSel = selectedCat === cat.id
+              return (
+                <button
+                  key={cat.id}
+                  type="button"
+                  onClick={() => setSelectedCat(cat.id)}
+                  className={`h-11 px-4 rounded-xl font-black text-xs uppercase tracking-wide shrink-0 transition-all active:scale-95 border ${
+                    isSel
+                      ? 'bg-white text-slate-900 border-2 shadow-sm font-black'
+                      : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+                  }`}
+                  style={{
+                    borderColor: isSel ? cat.color : undefined,
+                    boxShadow: isSel ? `0 0 0 1px ${cat.color}40` : undefined,
+                  }}
+                >
+                  <span className="flex items-center gap-1.5">
+                    <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: cat.color }} />
+                    {cat.nombre}
+                  </span>
+                </button>
+              )
+            })}
 
-            <Button
-              size="md"
-              variant="tab"
-              active={selectedCat === 'paquetes'}
+            <button
+              type="button"
               onClick={() => setSelectedCat('paquetes')}
-              className="text-sm font-black min-w-[100px]"
+              className={`h-11 px-4 rounded-xl font-black text-xs uppercase tracking-wide shrink-0 transition-all active:scale-95 border ${
+                selectedCat === 'paquetes'
+                  ? 'bg-purple-600 text-white border-purple-700 shadow-sm'
+                  : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+              }`}
             >
               PAQUETES
-            </Button>
+            </button>
           </div>
 
           {/* Main Menu Panel */}
           <Panel className="flex-1">
-            <div className="p-2 flex-1 overflow-y-auto bg-[#ECE9D8] swing-inset">
+            <div className="p-3 flex-1 overflow-y-auto bg-slate-50 rounded-b-xl">
               {/* When in "TODO": Show Category Big Cards first */}
               {selectedCat === 'todo' && (
-                <div className="mb-3">
-                  <span className="text-xs font-black text-gray-700 uppercase tracking-wider mb-1.5 block">
-                    Categorías Principales (Toca para ir):
+                <div className="mb-3.5">
+                  <span className="text-xs font-black text-slate-500 uppercase tracking-wider mb-2 block">
+                    Categorías Principales:
                   </span>
-                  <div className="grid grid-cols-4 gap-2">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
                     {catalogo.categorias.map(cat => (
                       <button
                         key={cat.id}
                         type="button"
                         onClick={() => setSelectedCat(cat.id)}
-                        className="swing-button flex flex-col items-center justify-center p-3 text-center min-h-[72px]"
-                        style={{ borderTop: `4px solid ${cat.color}` }}
+                        className="bg-white hover:bg-slate-50 p-3.5 rounded-xl border border-slate-200 shadow-2xs flex flex-col justify-between text-left min-h-[76px] transition-all active:scale-95 border-l-4"
+                        style={{ borderLeftColor: cat.color }}
                       >
-                        <span className="text-base font-black text-black">{cat.nombre.toUpperCase()}</span>
-                        <span className="text-xs text-gray-600 font-bold">
+                        <span className="text-sm font-black text-slate-900 leading-tight">
+                          {cat.nombre.toUpperCase()}
+                        </span>
+                        <span className="text-[11px] text-slate-500 font-semibold mt-1">
                           {catalogo.productos.filter(p => p.idCategoria === cat.id).length} productos
                         </span>
                       </button>
@@ -500,11 +607,10 @@ export function POS({ usuario, onLogout, onGoCocina, onGoAdmin }: POSProps) {
                     <button
                       type="button"
                       onClick={() => setSelectedCat('paquetes')}
-                      className="swing-button flex flex-col items-center justify-center p-3 text-center min-h-[72px]"
-                      style={{ borderTop: '4px solid #4A148C' }}
+                      className="bg-white hover:bg-slate-50 p-3.5 rounded-xl border border-slate-200 shadow-2xs flex flex-col justify-between text-left min-h-[76px] transition-all active:scale-95 border-l-4 border-l-purple-600"
                     >
-                      <span className="text-base font-black text-black">PAQUETES</span>
-                      <span className="text-xs text-gray-600 font-bold">
+                      <span className="text-sm font-black text-slate-900 leading-tight">PAQUETES</span>
+                      <span className="text-[11px] text-slate-500 font-semibold mt-1">
                         {catalogo.paquetes.length} combos
                       </span>
                     </button>
@@ -516,33 +622,33 @@ export function POS({ usuario, onLogout, onGoCocina, onGoAdmin }: POSProps) {
               {selectedCat !== 'paquetes' && (
                 <div>
                   {selectedCat === 'todo' && (
-                    <span className="text-xs font-black text-gray-700 uppercase tracking-wider mb-1.5 block">
+                    <span className="text-xs font-black text-slate-500 uppercase tracking-wider mb-2 block">
                       Todos los Productos:
                     </span>
                   )}
-                  <div className="grid grid-cols-3 xl:grid-cols-4 gap-2">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-2.5">
                     {currentProds.map(prod => {
                       const cat = catalogo.categorias.find(c => c.id === prod.idCategoria)
-                      const catColor = cat?.color || '#0A246A'
+                      const catColor = cat?.color || '#2563EB'
                       return (
                         <button
                           key={prod.id}
                           type="button"
                           onClick={() => handleProductClick(prod)}
-                          className="swing-button flex flex-col justify-between p-3 min-h-[84px] text-left"
-                          style={{ borderLeft: `6px solid ${catColor}` }}
+                          className="bg-white hover:bg-slate-50 p-3.5 rounded-xl border border-slate-200 shadow-2xs flex flex-col justify-between text-left min-h-[92px] transition-all active:scale-95 border-l-4"
+                          style={{ borderLeftColor: catColor }}
                         >
                           <div>
-                            <span className="text-base font-black text-black block leading-tight">
+                            <span className="text-sm sm:text-base font-black text-slate-900 block leading-tight">
                               {prod.nombre}
                             </span>
                             {prod.descripcion && (
-                              <span className="text-[11px] text-gray-600 font-normal line-clamp-1">
+                              <span className="text-[11px] text-slate-500 font-normal line-clamp-1 mt-0.5">
                                 {prod.descripcion}
                               </span>
                             )}
                           </div>
-                          <span className="text-lg font-black font-mono text-[#0A246A] mt-2">
+                          <span className="text-base sm:text-lg font-black font-mono text-blue-700 mt-2">
                             {fmt(prod.precio)}
                           </span>
                         </button>
@@ -554,34 +660,34 @@ export function POS({ usuario, onLogout, onGoCocina, onGoAdmin }: POSProps) {
 
               {/* Combos/Packages Grid */}
               {(selectedCat === 'paquetes' || selectedCat === 'todo') && catalogo.paquetes.length > 0 && (
-                <div className="mt-3">
-                  <span className="text-xs font-black text-gray-700 uppercase tracking-wider mb-1.5 block">
+                <div className="mt-3.5">
+                  <span className="text-xs font-black text-slate-500 uppercase tracking-wider mb-2 block">
                     Paquetes y Combos:
                   </span>
-                  <div className="grid grid-cols-3 gap-2">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
                     {catalogo.paquetes.map(paq => (
                       <button
                         key={paq.id}
                         type="button"
                         onClick={() => handleAddPaquete(paq)}
-                        className="swing-button flex flex-col justify-between p-3 min-h-[84px] text-left border-l-[6px] border-l-[#4A148C]"
+                        className="bg-white hover:bg-slate-50 p-3.5 rounded-xl border border-slate-200 shadow-2xs flex flex-col justify-between text-left min-h-[92px] transition-all active:scale-95 border-l-4 border-l-purple-600"
                       >
                         <div>
-                          <span className="text-base font-black text-black block leading-tight">
+                          <span className="text-sm sm:text-base font-black text-slate-900 block leading-tight">
                             {paq.nombre}
                           </span>
                           {paq.descripcion && (
-                            <span className="text-[11px] text-gray-600 font-normal line-clamp-2">
+                            <span className="text-[11px] text-slate-500 font-normal line-clamp-2 mt-0.5">
                               {paq.descripcion}
                             </span>
                           )}
                         </div>
                         <div className="flex justify-between items-baseline mt-2">
-                          <span className="text-lg font-black font-mono text-[#0A246A]">
+                          <span className="text-base sm:text-lg font-black font-mono text-purple-700">
                             {fmt(paq.precio)}
                           </span>
                           {paq.precioIndividual && paq.precioIndividual > paq.precio && (
-                            <span className="text-[10px] text-green-700 font-bold">
+                            <span className="text-[10px] text-emerald-600 font-black bg-emerald-50 px-1.5 py-0.5 rounded">
                               Ahorro: {fmt(paq.precioIndividual - paq.precio)}
                             </span>
                           )}
@@ -595,83 +701,97 @@ export function POS({ usuario, onLogout, onGoCocina, onGoAdmin }: POSProps) {
           </Panel>
         </div>
 
-        {/* Right Side: Order Ticket & Totals (38%) */}
-        <div className="col-span-4 flex flex-col min-h-0">
+        {/* Right Side: Order Ticket & Totals */}
+        <div
+          className={`md:col-span-5 lg:col-span-4 flex flex-col min-h-0 ${
+            mobileTab === 'cart' ? 'flex' : 'hidden md:flex'
+          }`}
+        >
           <Panel
-            title="TICKET DE VENTA"
+            title="COMANDA ACTUAL"
             headerRight={
-              <span className="text-xs font-mono font-bold bg-[#1F4E79] px-2 py-0.5">
-                {cart.length} {cart.length === 1 ? 'artículo' : 'artículos'}
+              <span className="text-xs font-mono font-black bg-blue-600 text-white px-2 py-0.5 rounded-full">
+                {cart.length} {cart.length === 1 ? 'ítem' : 'ítems'}
               </span>
             }
             className="flex-1"
           >
-            <div className="flex-1 flex flex-col justify-between bg-white swing-inset min-h-0 p-2">
+            <div className="flex-1 flex flex-col justify-between bg-white min-h-0 p-3 rounded-b-xl">
               {/* Lines list */}
-              <div className="flex-1 overflow-y-auto space-y-1.5 pr-1">
+              <div className="flex-1 overflow-y-auto space-y-2 pr-1">
                 {cart.length === 0 ? (
-                  <div className="h-full flex flex-col items-center justify-center text-gray-400 font-bold text-center p-4">
-                    <span className="text-lg block mb-1">LA ORDEN ESTÁ VACÍA</span>
-                    <span className="text-xs">Toca cualquier producto a la izquierda para agregarlo.</span>
+                  <div className="h-full flex flex-col items-center justify-center text-slate-400 font-bold text-center p-6">
+                    <span className="text-3xl block mb-2 opacity-50">🍕</span>
+                    <span className="text-base font-black text-slate-700 block mb-1">
+                      COMANDA VACÍA
+                    </span>
+                    <span className="text-xs text-slate-400">
+                      Toca cualquier producto a la izquierda para agregarlo.
+                    </span>
                   </div>
                 ) : (
                   cart.map((it, idx) => (
                     <div
                       key={it.uid}
-                      className="p-2 swing-outset-thin bg-[#FAFAFA] flex flex-col gap-1 border border-gray-300"
+                      className="p-2.5 rounded-xl bg-slate-50 border border-slate-200 flex flex-col gap-1 shadow-2xs"
                     >
                       <div className="flex justify-between items-baseline">
-                        <div className="flex items-baseline gap-1.5 flex-1 min-w-0 pr-2">
-                          <span className="text-base font-black font-mono text-[#0A246A]">
+                        <div className="flex items-baseline gap-2 flex-1 min-w-0 pr-2">
+                          <span className="text-base font-black font-mono text-blue-700">
                             {it.cantidad}×
                           </span>
-                          <span className="text-sm font-black text-black truncate">{it.nombre}</span>
+                          <span className="text-sm font-black text-slate-900 truncate">{it.nombre}</span>
                         </div>
 
-                        <span className="text-base font-black font-mono text-black shrink-0">
+                        <span className="text-base font-black font-mono text-slate-900 shrink-0">
                           {fmt(it.precioFinal * it.cantidad)}
                         </span>
                       </div>
 
                       {/* Modifiers (Tamaño, Masa) */}
                       {(it.tamano || it.masa) && (
-                        <div className="text-[11px] text-gray-600 font-bold">
-                          {it.tamano ? `Tamaño: ${it.tamano}` : ''}
-                          {it.tamano && it.masa ? ' · ' : ''}
-                          {it.masa ? `Masa: ${it.masa}` : ''}
+                        <div className="text-[11px] text-slate-600 font-bold flex items-center gap-1.5">
+                          {it.tamano && (
+                            <span className="bg-slate-200/70 px-1.5 py-0.2 rounded text-slate-800">
+                              {it.tamano}
+                            </span>
+                          )}
+                          {it.masa && (
+                            <span className="bg-slate-200/70 px-1.5 py-0.2 rounded text-slate-800">
+                              {it.masa}
+                            </span>
+                          )}
                         </div>
                       )}
 
                       {/* Line notes / Comments for kitchen */}
                       {it.notas && (
-                        <div className="text-xs font-bold text-[#B71C1C] bg-[#FFFDE7] p-1 border border-[#FBC02D]">
+                        <div className="text-xs font-bold text-amber-900 bg-amber-50 px-2 py-1 rounded-lg border border-amber-200">
                           Nota cocina: {it.notas}
                         </div>
                       )}
 
                       {/* Action buttons (Edit note, Delete) */}
-                      <div className="flex justify-end gap-1 pt-1 border-t border-gray-200 mt-1">
-                        <Button
-                          size="sm"
-                          variant="default"
+                      <div className="flex justify-end gap-1.5 pt-1.5 border-t border-slate-200 mt-1">
+                        <button
+                          type="button"
                           onClick={() => {
                             setEditingCartItemNote(idx)
                             setItemNoteInput(it.notas || '')
                           }}
-                          className="text-[11px] font-bold py-0.5 px-2 min-h-[32px]"
+                          className="px-2.5 py-1 rounded-lg bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 font-bold text-xs active:scale-95 transition-all"
                         >
-                          {it.notas ? 'EDITAR NOTA' : '+ NOTA'}
-                        </Button>
+                          {it.notas ? 'Editar Nota' : '+ Nota'}
+                        </button>
 
-                        <Button
-                          size="sm"
-                          variant="danger"
+                        <button
+                          type="button"
                           onClick={() => handleRemoveCartItem(idx)}
-                          className="text-[11px] font-black py-0.5 px-2 min-h-[32px]"
-                          title="Eliminar producto de la orden"
+                          className="px-2.5 py-1 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-black text-xs active:scale-95 transition-all"
+                          title="Eliminar producto de la comanda"
                         >
-                          ELIMINAR
-                        </Button>
+                          Eliminar
+                        </button>
                       </div>
                     </div>
                   ))
@@ -679,61 +799,46 @@ export function POS({ usuario, onLogout, onGoCocina, onGoAdmin }: POSProps) {
               </div>
 
               {/* Totals Summary */}
-              <div className="pt-2 border-t-2 border-black bg-[#ECE9D8] swing-inset p-2.5 mt-2 shrink-0">
-                <div className="space-y-1 text-xs">
-                  <div className="flex justify-between text-gray-700">
+              <div className="pt-3 border-t border-slate-200 bg-slate-50 p-3 rounded-xl mt-2 shrink-0">
+                <div className="space-y-1.5 text-xs">
+                  <div className="flex justify-between text-slate-600">
                     <span className="font-bold">Subtotal:</span>
-                    <span className="font-mono font-bold">{fmt(subtotal)}</span>
+                    <span className="font-mono font-bold text-slate-800">{fmt(subtotal)}</span>
                   </div>
 
                   {descuentoPct > 0 && (
-                    <div className="flex justify-between text-red-700">
-                      <span className="font-bold">Descuento ({descuentoPct}%):</span>
+                    <div className="flex justify-between text-rose-600 font-bold">
+                      <span>Descuento ({descuentoPct}%):</span>
                       <span className="font-mono font-bold">-{fmt(descuento)}</span>
                     </div>
                   )}
 
-                  <div className="flex justify-between text-gray-700">
+                  <div className="flex justify-between text-slate-600">
                     <span className="font-bold">IVA (16% incluido):</span>
-                    <span className="font-mono font-bold">{fmt(impuesto)}</span>
+                    <span className="font-mono font-bold text-slate-800">{fmt(impuesto)}</span>
                   </div>
 
-                  <div className="pt-1.5 border-t border-gray-400 flex justify-between items-baseline">
-                    <span className="text-base font-black text-black">TOTAL A PAGAR:</span>
-                    <span className="text-2xl font-black font-mono text-[#0A246A]">{fmt(total)}</span>
+                  <div className="pt-2 border-t border-slate-300 flex justify-between items-baseline">
+                    <span className="text-base font-black text-slate-900">TOTAL:</span>
+                    <span className="text-2xl font-black font-mono text-blue-700">{fmt(total)}</span>
                   </div>
                 </div>
 
-                {/* Bottom Action Buttons */}
+                {/* Bottom Action Buttons: Vaciar y Pagar Cuenta (Descuento movido a Cobro) */}
                 <div className="flex gap-2 mt-3">
                   <Button
                     size="md"
                     variant="default"
                     disabled={cart.length === 0}
                     onClick={() => {
-                      if (confirm('¿Vaciar todos los productos del ticket actual?')) {
+                      if (confirm('¿Vaciar todos los productos del pedido actual?')) {
                         setCart([])
                         setDescuentoPct(0)
                       }
                     }}
-                    className="text-xs font-bold"
+                    className="text-xs font-black px-3"
                   >
                     VACIAR
-                  </Button>
-
-                  <Button
-                    size="md"
-                    variant="default"
-                    onClick={() => {
-                      const pct = prompt('Introduce el porcentaje de descuento (0 - 100):', String(descuentoPct))
-                      if (pct !== null) {
-                        const n = Math.max(0, Math.min(100, parseFloat(pct) || 0))
-                        setDescuentoPct(n)
-                      }
-                    }}
-                    className="text-xs font-bold"
-                  >
-                    {descuentoPct > 0 ? `DESC: ${descuentoPct}%` : 'DESCUENTO'}
                   </Button>
 
                   <Button
@@ -741,7 +846,7 @@ export function POS({ usuario, onLogout, onGoCocina, onGoAdmin }: POSProps) {
                     variant="success"
                     disabled={cart.length === 0}
                     onClick={handleStartPay}
-                    className="flex-1 text-lg font-black tracking-wider py-3"
+                    className="flex-1 text-lg font-black tracking-wide py-3 shadow-md shadow-emerald-500/25"
                   >
                     PAGAR CUENTA
                   </Button>
@@ -752,43 +857,47 @@ export function POS({ usuario, onLogout, onGoCocina, onGoAdmin }: POSProps) {
         </div>
       </div>
 
-      {/* ── Modals ── */}
-      {/* 1. Customizer Modal */}
+      {/* ── Modales ── */}
+
+      {/* Modal para personalizar producto */}
       {customizingProduct && (
         <CustomizerModal
           item={customizingProduct.item}
           isPizza={customizingProduct.isPizza}
-          config={cfg}
+          config={catalogo.config}
           notasRapidas={catalogo.notasRapidas}
           onConfirm={handleConfirmCustomizer}
           onClose={() => setCustomizingProduct(null)}
         />
       )}
 
-      {/* 2. Modal for editing line note */}
+      {/* Modal para editar nota de un renglón en carrito */}
       {editingCartItemNote !== null && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 select-none">
-          <div className="w-full max-w-md swing-outset bg-[#D4D0C8] p-4 flex flex-col gap-3 border-2 border-black">
-            <span className="text-sm font-black text-[#0A246A] uppercase">
-              Editar Comentario de Cocina:
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs">
+          <div className="bg-white rounded-2xl p-5 max-w-md w-full shadow-2xl border border-slate-200">
+            <span className="text-base font-black text-slate-900 block mb-1">
+              NOTA DE COCINA PARA: {cart[editingCartItemNote]?.nombre}
             </span>
             <input
               type="text"
               value={itemNoteInput}
               onChange={e => setItemNoteInput(e.target.value)}
-              placeholder="Ej. Sin cebolla, extra salsa..."
-              className="w-full h-12 px-3 text-base font-bold bg-white swing-inset outline-none text-black"
+              placeholder="Ej. Sin cebolla, bien cocida, dorada..."
+              className="w-full h-12 px-3.5 text-base font-bold bg-slate-50 rounded-xl border border-slate-300 outline-none focus:ring-2 focus:ring-blue-500 text-slate-900 my-3"
               autoFocus
             />
             <div className="flex justify-end gap-2">
-              <Button size="md" variant="default" onClick={() => setEditingCartItemNote(null)}>
+              <Button
+                size="md"
+                variant="default"
+                onClick={() => setEditingCartItemNote(null)}
+              >
                 CANCELAR
               </Button>
               <Button
                 size="md"
-                variant="success"
+                variant="primary"
                 onClick={() => handleSaveItemNote(editingCartItemNote)}
-                className="font-black px-6"
               >
                 GUARDAR NOTA
               </Button>
@@ -797,7 +906,7 @@ export function POS({ usuario, onLogout, onGoCocina, onGoAdmin }: POSProps) {
         </div>
       )}
 
-      {/* 3. Order Type & Destination Modal */}
+      {/* Modal para elegir tipo de orden y destino */}
       {showOrderType && (
         <OrderTypeModal
           mesas={catalogo.mesas}
@@ -806,48 +915,56 @@ export function POS({ usuario, onLogout, onGoCocina, onGoAdmin }: POSProps) {
         />
       )}
 
-      {/* 4. Cuentas en Espera Modal */}
+      {/* Modal de cuentas en espera */}
       {showPending && (
         <PendingAccountsModal
-          ordenes={ordenes}
-          onClose={() => setShowPending(false)}
+          ordenes={cuentasEnEspera}
           onPayOrder={handlePayPendingOrder}
-          onCancelOrder={o => {
+          onCancelOrder={ord => {
             setShowPending(false)
-            setCancelTarget(o)
+            setCancelTarget(ord)
+          }}
+          onClose={() => setShowPending(false)}
+        />
+      )}
+
+      {/* Modal de menú de salida */}
+      {showExit && (
+        <ExitMenuModal
+          usuario={usuario}
+          onOpenNotas={() => setShowNotas(true)}
+          onOpenTurno={() => setShowTurno(true)}
+          onOpenCocina={() => onGoCocina && onGoCocina()}
+          onOpenAdmin={() => onGoAdmin && onGoAdmin()}
+          onLogout={onLogout}
+          onClose={() => setShowExit(false)}
+        />
+      )}
+
+      {/* Modal de Turno / Caja */}
+      {showTurno && (
+        <TurnoModal
+          usuario={usuario}
+          onClose={() => {
+            setShowTurno(false)
+            loadData()
           }}
         />
       )}
 
-      {/* 5. Exit Menu Modal */}
-      {showExit && (
-        <ExitMenuModal
-          usuario={usuario}
-          onClose={() => setShowExit(false)}
-          onLogout={onLogout}
-          onOpenConsultarNotas={() => setShowNotas(true)}
-          onOpenTurnos={() => setShowTurno(true)}
-          onGoCocina={onGoCocina}
-          onGoAdmin={onGoAdmin}
-        />
-      )}
-
-      {/* 6. Turno Modal */}
-      {showTurno && <TurnoModal usuario={usuario} onClose={() => setShowTurno(false)} />}
-
-      {/* 7. Consultar Notas Modal */}
+      {/* Modal de consultar notas de cocina */}
       {showNotas && (
         <ConsultarNotasModal
+          notasRapidas={catalogo.notasRapidas}
           onClose={() => setShowNotas(false)}
-          onCancelOrder={o => setCancelTarget(o)}
         />
       )}
 
-      {/* 8. Cancel Order Dialog */}
+      {/* Modal de confirmación de cancelación */}
       {cancelTarget && (
         <CancelDialog
-          order={cancelTarget}
-          needsSupervisor={!usuario.permisos.includes('cancelar')}
+          target={cancelTarget}
+          usuario={usuario}
           onConfirm={handleConfirmCancelOrder}
           onClose={() => setCancelTarget(null)}
         />

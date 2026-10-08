@@ -9,6 +9,7 @@ interface NumPadProps {
   onPreset?: (preset: number) => void
   onEnter?: () => void
   enterLabel?: string
+  className?: string
 }
 
 export function NumPad({
@@ -19,6 +20,7 @@ export function NumPad({
   onPreset,
   onEnter,
   enterLabel = 'ACEPTAR',
+  className = '',
 }: NumPadProps) {
   const handleDigit = (digit: string) => {
     if (digit === '.') {
@@ -51,7 +53,7 @@ export function NumPad({
   }
 
   return (
-    <div className="flex flex-col gap-2 w-full select-none">
+    <div className={`flex flex-col gap-2 w-full select-none ${className}`}>
       {presets && presets.length > 0 && (
         <div className="grid grid-cols-4 gap-2 mb-1">
           {presets.map(p => (
@@ -59,7 +61,7 @@ export function NumPad({
               key={p}
               size="sm"
               variant="default"
-              className="bg-[#E6F0FA] text-[#0A246A] font-extrabold text-base"
+              className="bg-blue-50 text-blue-700 border-blue-200 font-black text-base hover:bg-blue-100"
               onClick={() => onPreset ? onPreset(p) : onChange(String(p))}
             >
               ${p}
@@ -70,57 +72,56 @@ export function NumPad({
 
       <div className="grid grid-cols-3 gap-2">
         {['7', '8', '9', '4', '5', '6', '1', '2', '3'].map(num => (
-          <Button
+          <button
             key={num}
-            size="lg"
-            className="text-2xl font-black bg-white"
+            type="button"
+            className="h-14 md:h-16 rounded-xl font-mono text-2xl font-black bg-white border border-slate-200 text-slate-800 hover:bg-slate-50 shadow-sm active:scale-95 transition-all flex items-center justify-center"
             onClick={() => handleDigit(num)}
           >
             {num}
-          </Button>
+          </button>
         ))}
 
         {allowDecimal ? (
-          <Button
-            size="lg"
-            className="text-2xl font-black bg-white"
+          <button
+            type="button"
+            className="h-14 md:h-16 rounded-xl font-mono text-2xl font-black bg-white border border-slate-200 text-slate-800 hover:bg-slate-50 shadow-sm active:scale-95 transition-all flex items-center justify-center"
             onClick={() => handleDigit('.')}
           >
             .
-          </Button>
+          </button>
         ) : (
-          <Button
-            size="lg"
-            className="text-xl font-bold bg-[#ECE9D8]"
+          <button
+            type="button"
+            className="h-14 md:h-16 rounded-xl font-mono text-xl font-bold bg-slate-50 border border-slate-200 text-slate-700 hover:bg-slate-100 shadow-sm active:scale-95 transition-all flex items-center justify-center"
             onClick={() => handleDigit('00')}
           >
             00
-          </Button>
+          </button>
         )}
 
-        <Button
-          size="lg"
-          className="text-2xl font-black bg-white"
+        <button
+          type="button"
+          className="h-14 md:h-16 rounded-xl font-mono text-2xl font-black bg-white border border-slate-200 text-slate-800 hover:bg-slate-50 shadow-sm active:scale-95 transition-all flex items-center justify-center"
           onClick={() => handleDigit('0')}
         >
           0
-        </Button>
+        </button>
 
-        <Button
-          size="lg"
-          variant="danger"
-          className="text-xl font-black"
+        <button
+          type="button"
+          className="h-14 md:h-16 rounded-xl font-bold text-base bg-rose-50 text-rose-700 border border-rose-200 hover:bg-rose-100 shadow-sm active:scale-95 transition-all flex items-center justify-center"
           onClick={handleDelete}
         >
-          BORRAR
-        </Button>
+          ⌫ BORRAR
+        </button>
       </div>
 
       <div className="grid grid-cols-2 gap-2 mt-1">
         <Button
-          size="md"
-          variant="warning"
-          className="text-base font-bold"
+          size="lg"
+          variant="default"
+          className="text-base font-bold text-slate-700 bg-slate-100 border-slate-300 hover:bg-slate-200"
           onClick={handleClear}
         >
           LIMPIAR
@@ -128,12 +129,12 @@ export function NumPad({
 
         {onEnter && (
           <Button
-            size="md"
+            size="lg"
             variant="success"
-            className="text-base font-black tracking-wider"
+            className="text-lg font-black tracking-wide shadow-md shadow-emerald-500/20"
             onClick={onEnter}
           >
-            {enterLabel}
+            ✓ {enterLabel}
           </Button>
         )}
       </div>

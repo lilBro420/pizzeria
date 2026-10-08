@@ -15,20 +15,20 @@ export function Button({
   disabled,
   ...props
 }: ButtonProps) {
-  let variantStyles = 'bg-[#E1E1E1] text-black border-t-white border-l-white border-r-[#808080] border-b-[#808080]'
+  let variantStyles = 'bg-white text-slate-800 border border-slate-300 hover:bg-slate-50 shadow-sm'
   if (variant === 'primary') {
-    variantStyles = 'bg-[#1F4E79] text-white border-t-[#6FA0D2] border-l-[#6FA0D2] border-r-[#0D243A] border-b-[#0D243A]'
+    variantStyles = 'bg-blue-600 hover:bg-blue-700 text-white border border-blue-700 shadow-sm shadow-blue-500/20'
   } else if (variant === 'success') {
-    variantStyles = 'bg-[#2E7D32] text-white border-t-[#66BB6A] border-l-[#66BB6A] border-r-[#1B5E20] border-b-[#1B5E20]'
+    variantStyles = 'bg-emerald-600 hover:bg-emerald-700 text-white border border-emerald-700 shadow-sm shadow-emerald-500/20'
   } else if (variant === 'danger') {
-    variantStyles = 'bg-[#B71C1C] text-white border-t-[#EF5350] border-l-[#EF5350] border-r-[#5F0909] border-b-[#5F0909]'
+    variantStyles = 'bg-rose-600 hover:bg-rose-700 text-white border border-rose-700 shadow-sm shadow-rose-500/20'
   } else if (variant === 'warning') {
-    variantStyles = 'bg-[#E65100] text-white border-t-[#FFA726] border-l-[#FFA726] border-r-[#7A2800] border-b-[#7A2800]'
+    variantStyles = 'bg-amber-500 hover:bg-amber-600 text-white border border-amber-600 shadow-sm shadow-amber-500/20'
   } else if (variant === 'tab') {
     if (active) {
-      variantStyles = 'bg-[#D4D0C8] text-black border-t-[#808080] border-l-[#808080] border-r-white border-b-white font-extrabold'
+      variantStyles = 'bg-white text-blue-700 border-2 border-blue-600 shadow-sm font-black'
     } else {
-      variantStyles = 'bg-[#B0ACA5] text-[#333333] border-t-white border-l-white border-r-[#808080] border-b-[#808080]'
+      variantStyles = 'bg-slate-100 text-slate-600 hover:bg-slate-200 border border-slate-200 font-bold'
     }
   }
 
@@ -36,15 +36,15 @@ export function Button({
   if (size === 'sm') {
     sizeStyles = 'min-h-[40px] px-3 py-1.5 text-sm'
   } else if (size === 'lg') {
-    sizeStyles = 'min-h-[56px] px-6 py-3 text-lg font-bold'
+    sizeStyles = 'min-h-[54px] px-6 py-3 text-lg font-bold'
   }
 
-  const activePressed = active && variant !== 'tab' ? 'border-t-[#808080] border-l-[#808080] border-r-white border-b-white bg-[#C4C0B8]' : ''
+  const activeRing = active && variant !== 'tab' ? 'ring-2 ring-blue-500 ring-offset-1 font-black' : ''
 
   return (
     <button
       disabled={disabled}
-      className={`swing-button border-2 select-none active:translate-x-[1px] active:translate-y-[1px] ${sizeStyles} ${variantStyles} ${activePressed} ${className}`}
+      className={`pos-button select-none active:scale-[0.98] transition-all duration-100 ${sizeStyles} ${variantStyles} ${activeRing} ${className}`}
       {...props}
     >
       {children}
