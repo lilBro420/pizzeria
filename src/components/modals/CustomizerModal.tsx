@@ -1,159 +1,275 @@
-import { useState } from 'react'
-import { MenuItem, PizzaSize, PizzaDough } from '../../types'
-import { SIZES, DOUGHS, SIZE_EXTRA } from '../../data/menu'
-import { fmt, unitPrice } from '../../utils/formatters'
-import { Minus, Plus, MessageSquare, X } from 'lucide-react'
+import React, { useState } from 'react'
+import { Configuracion, NotaRapida, PizzaMasa, PizzaTamano, Producto } from '../../types'
+import { fmt } from '../../utils/formatters'
+import { Button } from '../ui/Button'
+import { Dialog } from '../ui/Dialog'
+import { VirtualKeyboard } from '../ui/VirtualKeyboard'
 
 interface CustomizerModalProps {
-  item: MenuItem
+  item: Producto
+  isPizza: boolean
+  config: Configuracion
+  notasRapidas: NotaRapida[]
   initialQty?: number
-  initialSize?: PizzaSize
-  initialDough?: PizzaDough
+  initialSize?: PizzaTamano
+  initialDough?: PizzaMasa
   initialComments?: string
-  onConfirm: (qty: number, size?: PizzaSize, dough?: PizzaDough, comments?: string) => void
+  onConfirm: (qty: number, size?: PizzaTamano | null, dough?: PizzaMasa | null, comments?: string | null) => void
   onClose: () => void
 }
 
-export function CustomizerModal({ 
-  item, 
+export function CustomizerModal({
+  item,
+  isPizza,
+  config,
+  notasRapidas,
   initialQty = 1,
   initialSize = 'Mediana',
   initialDough = 'Delgada',
   initialComments = '',
-  onConfirm, 
-  onClose 
+  onConfirm,
+  onClose,
 }: CustomizerModalProps) {
-  const isPizza = item.category === 'pizzas'
   const [qty, setQty] = useState(initialQty)
-  const [size, setSize] = useState<PizzaSize>(initialSize)
-  const [dough, setDough] = useState<PizzaDough>(initialDough)
+  const [size, setSize] = useState<PizzaTamano>(initialSize)
+  const [dough, setDough] = useState<PizzaMasa>(initialDough)
   const [comments, setComments] = useState(initialComments)
-  
-  const unitPriceCalc = isPizza ? unitPrice(item, size, dough) : item.basePrice
-  const total = unitPriceCalc * qty
+  const [showKeyboard, setShowKeyboard] = useState(false)
+
+  const SIZES: PizzaTamano[] = ['Chica', 'Mediana', 'Grande']
+  const DOUGHS: PizzaMasa[] = ['Delgada', 'Gruesa', 'Orilla Rellena']
+
+  const sizeExtra = isPizza ? config.extras[size] ?? 0 : 0
+  const doughExtra = isPizza ? config.extras[dough] ?? 0 : 0
+  const unitPrice = Math.max(0, item.precio + sizeExtra + doughExtra)
+  const totalPrice = unitPrice * qty
+
+  const handleToggleNotaRapida = (texto: string) => {
+    if (comments.includes(texto)) {
+      setComments(comments.replace(texto, '').replace(/,\s*,/g, ',').replace(/^,\s*|,\s*$/g, '').trim())
+    } else {
+      setComments(comments ? `${comments}, ${texto}` : texto)
+    }
+  }
 
   return (
-    <div className="fixed inset-0 z-40 flex items-center justify-center" onClick={onClose}>
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
-      <div
-        className="relative z-50 w-full max-w-sm mx-4 max-h-[90vh] flex flex-col rounded-3xl overflow-hidden shadow-2xl"
-        style={{ background: '#1a1a2e', border: '1.5px solid #2d2d4a' }}
-        onClick={e => e.stopPropagation()}
-      >
-        <div className="px-6 pt-6 pb-4 border-b shrink-0" style={{ borderColor: '#2d2d4a' }}>
-          <div className="flex items-start justify-between">
-            <div>
-              <div className="text-3xl mb-1">{item.emoji}</div>
-              <h2 className="text-white font-black text-xl tracking-tight">Agregar {item.name}</h2>
-              <p className="text-gray-400 text-sm mt-0.5">{item.desc}</p>
-            </div>
+    <Dialog title={`PERSONALIZAR: ${item.nombre.toUpperCase()}`} isOpen={true} onClose={onClose} maxWidth="max-w-xl">
+      <div className="flex flex-col gap-4 select-none">
+        {/* Quantity selector */}
+        <div className="bg-white rounded-xl border border-slate-200 p-3.5 flex items-center justify-between shadow-sm">
+          <div>
+            <span className="font-extrabold text-base text-slate-800 uppercase tracking-wide block">
+              Cantidad:
+            </span>
+            <span className="text-xs text-slate-500">Unidades a comanda</span>
+          </div>
+          <div className="flex items-center gap-3">
             <button
-              onClick={onClose}
-              className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-gray-400 hover:text-white flex items-center justify-center transition-colors cursor-pointer"
+              type="button"
+              className="w-13 h-13 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 text-2xl font-black border border-slate-300 shadow-sm active:scale-95 transition-all flex items-center justify-center"
+              onClick={() => setQty(Math.max(1, qty - 1))}
             >
-              <X size={18} />
+              -
+            </button>
+            <span className="text-3xl font-black font-mono w-14 text-center text-slate-900">{qty}</span>
+            <button
+              type="button"
+              className="w-13 h-13 rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-700 text-2xl font-black border border-blue-300 shadow-sm active:scale-95 transition-all flex items-center justify-center"
+              onClick={() => setQty(qty + 1)}
+            >
+              +
             </button>
           </div>
         </div>
 
-        <div className="px-6 py-5 space-y-5 overflow-y-auto" style={{ scrollbarWidth: 'thin', scrollbarColor: '#2d2d4a transparent' }}>
-          
-          <div className="flex items-center justify-between bg-[#12122a] p-3 rounded-2xl">
-            <span className="text-gray-400 font-bold uppercase text-xs tracking-widest pl-2">Cantidad</span>
-            <div className="flex items-center gap-4">
-              <button 
-                onClick={() => setQty(Math.max(1, qty - 1))}
-                className="w-10 h-10 rounded-xl bg-[#2d2d4a] hover:bg-[#3d3d6a] flex items-center justify-center text-white transition-colors cursor-pointer"
-              >
-                <Minus size={18} />
-              </button>
-              <span className="text-2xl font-black font-mono text-white w-6 text-center">{qty}</span>
-              <button 
-                onClick={() => setQty(qty + 1)}
-                className="w-10 h-10 rounded-xl bg-[#C41E3A] hover:bg-red-600 flex items-center justify-center text-white transition-colors cursor-pointer"
-              >
-                <Plus size={18} />
-              </button>
+        {/* Pizza Size & Dough Options */}
+        {isPizza && (
+          <div className="flex flex-col gap-3.5">
+            {/* Live Selection Summary Pill */}
+            <div className="bg-blue-50 border border-blue-200 rounded-xl px-4 py-2.5 flex items-center justify-between text-blue-900 shadow-sm">
+              <span className="text-xs font-bold uppercase tracking-wider text-blue-600">Selección actual:</span>
+              <span className="text-sm font-black flex items-center gap-2">
+                <span className="bg-blue-600 text-white px-2 py-0.5 rounded-md text-xs">{size}</span>
+                <span className="text-blue-400">•</span>
+                <span className="bg-indigo-600 text-white px-2 py-0.5 rounded-md text-xs">{dough}</span>
+              </span>
             </div>
-          </div>
 
-          {isPizza && (
-            <>
-              <div>
-                <div className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-2.5">Tamaño</div>
-                <div className="grid grid-cols-3 gap-2">
-                  {SIZES.map(s => {
-                    const extra = SIZE_EXTRA[s]
-                    return (
-                      <button
-                        key={s}
-                        onClick={() => setSize(s)}
-                        className={`py-3 rounded-2xl text-sm font-bold transition-all cursor-pointer flex flex-col items-center gap-1 ${
-                          size === s
-                            ? 'bg-[#C41E3A] text-white shadow-lg shadow-red-900/30'
-                            : 'bg-white/8 text-gray-300 hover:bg-white/15 border border-white/10'
-                        }`}
-                      >
-                        <span>{s}</span>
-                        <span className={`text-[10px] font-mono ${size === s ? 'text-red-200' : 'text-gray-500'}`}>
-                          {extra === 0 ? 'base' : extra > 0 ? `+$${extra}` : `-$${Math.abs(extra)}`}
-                        </span>
-                      </button>
-                    )
-                  })}
-                </div>
+            {/* Size Options */}
+            <div>
+              <div className="text-xs font-extrabold text-slate-700 uppercase tracking-wider mb-1.5 flex justify-between">
+                <span>1. Tamaño de Pizza:</span>
+                <span className="text-blue-600 font-black">Seleccionado: {size}</span>
               </div>
-
-              <div>
-                <div className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-2.5">Masa</div>
-                <div className="grid grid-cols-3 gap-2">
-                  {DOUGHS.map(d => (
+              <div className="grid grid-cols-3 gap-2.5">
+                {SIZES.map(s => {
+                  const extra = config.extras[s] ?? 0
+                  const isSel = size === s
+                  return (
                     <button
-                      key={d}
-                      onClick={() => setDough(d)}
-                      className={`py-3 px-2 rounded-2xl text-xs font-bold transition-all cursor-pointer text-center leading-tight ${
-                        dough === d
-                          ? 'bg-[#C41E3A] text-white shadow-lg shadow-red-900/30'
-                          : 'bg-white/8 text-gray-300 hover:bg-white/15 border border-white/10'
+                      key={s}
+                      type="button"
+                      onClick={() => setSize(s)}
+                      className={`relative min-h-[58px] p-2.5 rounded-xl flex flex-col items-center justify-center transition-all active:scale-95 border-2 ${
+                        isSel
+                          ? 'bg-blue-600 text-white border-blue-700 shadow-md shadow-blue-500/25 ring-2 ring-blue-400/50'
+                          : 'bg-white text-slate-800 border-slate-200 hover:border-slate-300 hover:bg-slate-50'
                       }`}
                     >
-                      {d}
-                      {d === 'Orilla Rellena' && (
-                        <span className={`block text-[10px] font-mono mt-0.5 ${dough === d ? 'text-red-200' : 'text-gray-500'}`}>
-                          +$20
+                      {isSel && (
+                        <span className="absolute top-1.5 right-1.5 bg-white text-blue-700 text-[10px] font-black w-4 h-4 rounded-full flex items-center justify-center">
+                          ✓
                         </span>
                       )}
+                      <span className="text-base font-black tracking-tight">{s}</span>
+                      <span
+                        className={`text-xs font-mono mt-0.5 font-bold ${
+                          isSel ? 'text-blue-100' : 'text-slate-500'
+                        }`}
+                      >
+                        {extra === 0 ? 'Normal' : extra > 0 ? `+$${extra}` : `-$${Math.abs(extra)}`}
+                      </span>
                     </button>
-                  ))}
-                </div>
+                  )
+                })}
               </div>
-            </>
-          )}
-
-          <div>
-            <div className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-2.5 flex items-center gap-1.5">
-              <MessageSquare size={14} /> Notas para cocina
             </div>
-            <textarea
-              value={comments}
-              onChange={e => setComments(e.target.value)}
-              placeholder="Ej: Sin cebolla, aderezo aparte..."
-              className="w-full bg-white/5 border border-white/10 rounded-2xl p-3 text-sm text-white placeholder:text-gray-600 focus:outline-none focus:border-red-500/50 resize-none h-20 transition-colors"
-            />
+
+            {/* Dough Options */}
+            <div>
+              <div className="text-xs font-extrabold text-slate-700 uppercase tracking-wider mb-1.5 flex justify-between">
+                <span>2. Tipo de Masa:</span>
+                <span className="text-indigo-600 font-black">Seleccionado: {dough}</span>
+              </div>
+              <div className="grid grid-cols-3 gap-2.5">
+                {DOUGHS.map(d => {
+                  const extra = config.extras[d] ?? 0
+                  const isSel = dough === d
+                  return (
+                    <button
+                      key={d}
+                      type="button"
+                      onClick={() => setDough(d)}
+                      className={`relative min-h-[58px] p-2.5 rounded-xl flex flex-col items-center justify-center transition-all active:scale-95 border-2 ${
+                        isSel
+                          ? 'bg-indigo-600 text-white border-indigo-700 shadow-md shadow-indigo-500/25 ring-2 ring-indigo-400/50'
+                          : 'bg-white text-slate-800 border-slate-200 hover:border-slate-300 hover:bg-slate-50'
+                      }`}
+                    >
+                      {isSel && (
+                        <span className="absolute top-1.5 right-1.5 bg-white text-indigo-700 text-[10px] font-black w-4 h-4 rounded-full flex items-center justify-center">
+                          ✓
+                        </span>
+                      )}
+                      <span className="text-sm font-black text-center leading-tight">{d}</span>
+                      <span
+                        className={`text-xs font-mono mt-0.5 font-bold ${
+                          isSel ? 'text-indigo-100' : 'text-slate-500'
+                        }`}
+                      >
+                        {extra > 0 ? `+$${extra}` : 'Normal'}
+                      </span>
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Quick Kitchen Notes */}
+        <div>
+          <div className="text-xs font-extrabold text-slate-700 uppercase tracking-wider mb-1.5">
+            Comentarios Rápidos para Cocina:
+          </div>
+          <div className="flex flex-wrap gap-2 max-h-32 overflow-y-auto p-2 bg-white rounded-xl border border-slate-200 shadow-inner">
+            {notasRapidas.map(nr => {
+              const active = comments.includes(nr.texto)
+              return (
+                <button
+                  key={nr.id}
+                  type="button"
+                  onClick={() => handleToggleNotaRapida(nr.texto)}
+                  className={`px-3 py-2 text-xs font-bold rounded-lg select-none transition-all active:scale-95 ${
+                    active
+                      ? 'bg-slate-900 text-white shadow-sm ring-2 ring-slate-700'
+                      : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200'
+                  }`}
+                >
+                  {active ? `✓ ${nr.texto}` : nr.texto}
+                </button>
+              )
+            })}
           </div>
         </div>
 
-        <div className="px-6 py-5 shrink-0 border-t" style={{ borderColor: '#2d2d4a' }}>
-          <button
-            onClick={() => onConfirm(qty, isPizza ? size : undefined, isPizza ? dough : undefined, comments)}
-            className="w-full py-4 rounded-2xl font-black text-white text-base uppercase tracking-wide transition-all cursor-pointer flex justify-between px-6 items-center"
-            style={{ background: '#C41E3A', boxShadow: '0 6px 24px rgba(196,30,58,0.45)' }}
-          >
-            <span>Agregar</span>
-            <span className="font-mono">{fmt(total)}</span>
-          </button>
+        {/* Free text comments */}
+        <div>
+          <div className="flex justify-between items-center mb-1.5">
+            <span className="text-xs font-extrabold text-slate-700 uppercase tracking-wider">
+              Notas Adicionales:
+            </span>
+            <button
+              type="button"
+              onClick={() => setShowKeyboard(!showKeyboard)}
+              className="text-xs font-black text-blue-600 hover:underline uppercase"
+            >
+              {showKeyboard ? 'Ocultar teclado' : 'Abrir teclado táctil'}
+            </button>
+          </div>
+          <input
+            type="text"
+            value={comments}
+            onChange={e => setComments(e.target.value)}
+            onFocus={() => setShowKeyboard(true)}
+            placeholder="Ej. Salsa picante aparte, partir en 8 rebanadas..."
+            className="w-full h-12 px-3.5 text-base font-medium bg-white rounded-xl border border-slate-300 outline-none focus:ring-2 focus:ring-blue-500 text-slate-900 shadow-sm"
+          />
+        </div>
+
+        {/* Virtual Keyboard */}
+        {showKeyboard && (
+          <div className="pt-2 border-t border-slate-200">
+            <VirtualKeyboard value={comments} onChange={setComments} />
+          </div>
+        )}
+
+        {/* Price Summary & Confirm */}
+        <div className="pt-3 border-t border-slate-200 flex items-center justify-between gap-3">
+          <div className="flex flex-col">
+            <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Total a Comanda:</span>
+            <div className="flex items-baseline gap-2">
+              <span className="text-2xl font-black font-mono text-blue-700">{fmt(totalPrice)}</span>
+              {qty > 1 && (
+                <span className="text-xs font-mono text-slate-500 font-bold">
+                  ({fmt(unitPrice)} c/u)
+                </span>
+              )}
+            </div>
+          </div>
+
+          <div className="flex gap-2">
+            <Button size="lg" variant="default" onClick={onClose}>
+              CANCELAR
+            </Button>
+            <Button
+              size="lg"
+              variant="success"
+              onClick={() => {
+                onConfirm(
+                  qty,
+                  isPizza ? size : null,
+                  isPizza ? dough : null,
+                  comments.trim() || null
+                )
+              }}
+              className="px-6 text-base font-black shadow-md shadow-emerald-500/20"
+            >
+              AGREGAR A COMANDA
+            </Button>
+          </div>
         </div>
       </div>
-    </div>
+    </Dialog>
   )
 }

@@ -1,323 +1,564 @@
-import { useState } from 'react'
-import { OrderItem, OrderType, PayMethod } from '../../types'
-import { ORDER_TYPES, PAY } from '../../constants/orderRules'
+import React, { useState } from 'react'
+import { MetodoPago, PagoAplicado } from '../../types'
 import { fmt } from '../../utils/formatters'
-import { ArrowLeft, Plus, X, Trash2 } from 'lucide-react'
+import { Button } from '../ui/Button'
+import { NumPad } from '../ui/NumPad'
+import { Panel } from '../ui/Panel'
 
 interface PayScreenProps {
-  order: OrderItem[]
-  orderType: OrderType
   total: number
-  discount: number
-  discountAmt: number
-  onConfirm: (payments: { method: PayMethod, amount: number }[]) => void
+  subtotal: number
+  descuento: number
+  impuesto: number
+  descuentoPctInitial?: number
+  ivaTasa?: number
+  ivaIncluido?: boolean
+  folio?: string
+  mesa?: string | null
+  clienteNombre?: string | null
+  onConfirm: (
+    pagos: {
+      metodo: 'efectivo' | 'dolares' | 'tarjeta' | 'transferencia'
+      monto: number
+      montoRecibido?: number | null
+    }[],
+    nuevoDescuentoPct?: number
+  ) => void
+  onSendToWaiting?: () => void
   onBack: () => void
 }
 
-const KEYS = [
-  ['7', '8', '9'],
-  ['4', '5', '6'],
-  ['1', '2', '3'],
-  ['.', '0', 'DEL'],
-]
-
-const COINS = [0.5, 1, 2, 5, 10, 20]
-const BILLS = [50, 100, 200, 500, 1000]
-
 export function PayScreen({
-  order,
-  orderType,
-  total,
-  discount,
-  discountAmt,
+  total: initialTotal,
+  subtotal: initialSubtotal,
+  descuento: initialDescuento,
+  impuesto: initialImpuesto,
+  descuentoPctInitial = 0,
+  ivaTasa = 0.16,
+  ivaIncluido = true,
+  folio,
+  mesa,
+  clienteNombre,
   onConfirm,
+  onSendToWaiting,
   onBack,
 }: PayScreenProps) {
-  const allowed = ORDER_TYPES[orderType].payMethods
-  const [payMethod, setPayMethod] = useState<PayMethod>(allowed[0])
-  const [input, setInput] = useState('')
-  const [appliedPayments, setAppliedPayments] = useState<{method: PayMethod, amount: number}[]>([])
+  const [selectedMethod, setSelectedMethod] = useState<'efectivo' | 'dolares' | 'tarjeta' | 'transferencia'>('efectivo')
+  const [inputMonto, setInputMonto] = useState('')
+  const [pagos, setPagos] = useState<PagoAplicado[]>([])
+  const [descuentoPct, setDescuentoPct] = useState(descuentoPctInitial)
+  const [showDiscountModal, setShowDiscountModal] = useState(false)
 
-  const totalPaid = appliedPayments.reduce((s, p) => s + p.amount, 0)
-  const remaining = Math.max(0, total - totalPaid)
-  const currentInputAmount = parseFloat(input) || 0
-  
-  const change = (totalPaid + currentInputAmount) - total
-  
-  const canConfirm = (totalPaid + currentInputAmount) >= total
+  // Tipo de cambio USD a MXN (fijo o configurable)
+  const TIPO_CAMBIO_USD = 18.0
 
-  const press = (key: string) => {
-    if (key === 'DEL') {
-      setInput(p => p.slice(0, -1))
-      return
+  // Cálculo en vivo de totales considerando si se cambió el descuento en esta pantalla
+  const bruto = initialSubtotal + (descuentoPctInitial > 0 ? initialDescuento : 0)
+  const descMonto = Math.round((bruto * descuentoPct) / 100 * 100) / 100
+  const neto = Math.max(0, bruto - descMonto)
+  const total = neto
+  const subtotal = ivaIncluido ? Math.round((neto / (1 + ivaTasa)) * 100) / 100 : neto
+  const impuesto = Math.round((total - subtotal) * 100) / 100
+
+  // Centavos enteros para precisión absoluta
+  const totalCents = Math.round(total * 100)
+  const pagadoCents = pagos.reduce((acc, p) => acc + Math.round(p.monto * 100), 0)
+  const restanteCents = Math.max(0, totalCents - pagadoCents)
+  const restante = restanteCents / 100
+
+  const inputNumber = parseFloat(inputMonto) || 0
+
+  // Si paga en dólares, convertir el input a pesos MXN
+  const inputEnMXN = selectedMethod === 'dolares' ? inputNumber * TIPO_CAMBIO_USD : inputNumber
+  const inputEnMXNCents = Math.round(inputEnMXN * 100)
+
+  // Cambio permanente guardado en estado (para que NUNCA desaparezca de la vista)
+  const [cambioPermanente, setCambioPermanente] = useState<number | null>(null)
+
+  // Cambio en tiempo real si el cajero está tecleando
+  const efectivoCambioEnVivo =
+    (selectedMethod === 'efectivo' || selectedMethod === 'dolares') && inputEnMXNCents > restanteCents
+      ? (inputEnMXNCents - restanteCents) / 100
+      : null
+
+  // Cambio visible definitivo (el de en vivo o el permanente guardado)
+  const cambioMostrar = efectivoCambioEnVivo ?? cambioPermanente ?? 0
+
+  const BILLS_MXN = [50, 100, 200, 500, 1000]
+  const BILLS_USD = [5, 10, 20, 50, 100]
+
+  // Botón "ACEPTAR" del teclado numérico
+  const handleAceptarMonto = () => {
+    if (restanteCents <= 0 && pagos.length > 0) return
+
+    let montoAplicarCents = 0
+    let montoRecibidoCents = 0
+
+    if (inputEnMXNCents <= 0) {
+      // Si no tecleó número, aplica el restante exacto
+      montoAplicarCents = restanteCents
+      montoRecibidoCents = restanteCents
+    } else if (selectedMethod === 'efectivo' || selectedMethod === 'dolares') {
+      if (inputEnMXNCents >= restanteCents) {
+        montoAplicarCents = restanteCents
+        montoRecibidoCents = inputEnMXNCents
+        const cambioCalculado = (inputEnMXNCents - restanteCents) / 100
+        setCambioPermanente(cambioCalculado)
+      } else {
+        montoAplicarCents = inputEnMXNCents
+        montoRecibidoCents = inputEnMXNCents
+      }
+    } else {
+      // Tarjeta o transferencia
+      montoAplicarCents = Math.min(inputEnMXNCents, restanteCents)
+      montoRecibidoCents = montoAplicarCents
     }
-    if (key === 'CLR') {
-      setInput('')
-      return
+
+    const nuevoPago: PagoAplicado = {
+      metodo: selectedMethod,
+      monto: montoAplicarCents / 100,
+      montoRecibido: montoRecibidoCents / 100,
+      cambio: (montoRecibidoCents - montoAplicarCents) / 100,
     }
-    if (key === '.') {
-      if (input.includes('.')) return
-      setInput(p => (p === '' ? '0.' : p + '.'))
-      return
-    }
-    if (input.includes('.') && input.split('.')[1]?.length >= 2) return
-    setInput(p => (p === '0' ? key : p + key))
+
+    setPagos([...pagos, nuevoPago])
+    setInputMonto('')
   }
 
-  const addAmount = (amount: number) => {
-    const current = parseFloat(input) || 0
-    setInput(
-      (current + amount)
-        .toFixed(2)
-        .replace(/\.?0+$/, '')
-        .replace(/(\.\d)0$/, '$1')
+  const handleRemovePayment = (index: number) => {
+    setPagos(pagos.filter((_, idx) => idx !== index))
+    setCambioPermanente(null)
+  }
+
+  // Botón "PAGAR CUENTA"
+  const handlePagarCuenta = () => {
+    // Si aún falta dinero pero hay un número ingresado en el teclado:
+    if (restanteCents > 0) {
+      if (inputEnMXNCents >= restanteCents) {
+        // Aplica el pago pendiente automáticamente
+        const montoAplicarCents = restanteCents
+        const recibidoCents = inputEnMXNCents
+        const lista = [
+          ...pagos,
+          {
+            metodo: selectedMethod,
+            monto: montoAplicarCents / 100,
+            montoRecibido: recibidoCents / 100,
+            cambio: (recibidoCents - montoAplicarCents) / 100,
+          },
+        ]
+        onConfirm(
+          lista.map(p => ({
+            metodo: p.metodo as any,
+            monto: p.monto,
+            montoRecibido: p.montoRecibido,
+          })),
+          descuentoPct
+        )
+        return
+      }
+
+      alert('El monto ingresado no cubre el total de la cuenta.')
+      return
+    }
+
+    if (pagos.length === 0) {
+      alert('Introduce el monto recibido y presiona Aceptar.')
+      return
+    }
+
+    onConfirm(
+      pagos.map(p => ({
+        metodo: p.metodo as any,
+        monto: p.monto,
+        montoRecibido: p.montoRecibido,
+      })),
+      descuentoPct
     )
   }
 
-  const applyPayment = () => {
-    if (currentInputAmount <= 0) {
-      if (remaining > 0) {
-        setAppliedPayments([...appliedPayments, { method: payMethod, amount: remaining }])
-      }
-    } else {
-      setAppliedPayments([...appliedPayments, { method: payMethod, amount: currentInputAmount }])
-      setInput('')
-    }
-  }
-
-  const removePayment = (index: number) => {
-    setAppliedPayments(appliedPayments.filter((_, i) => i !== index))
-  }
-
-  const handleConfirm = () => {
-    if (currentInputAmount > 0) {
-      onConfirm([...appliedPayments, { method: payMethod, amount: currentInputAmount }])
-    } else if (totalPaid >= total) {
-      onConfirm(appliedPayments)
-    } else {
-      onConfirm([...appliedPayments, { method: payMethod, amount: remaining }])
-    }
-  }
+  const cuentaCubierta =
+    restanteCents === 0 ||
+    ((selectedMethod === 'efectivo' || selectedMethod === 'dolares') && inputEnMXNCents >= restanteCents) ||
+    inputEnMXNCents === restanteCents
 
   return (
-    <div className="flex flex-col md:flex-row h-screen overflow-hidden bg-gray-100 font-sans">
-      <div className="flex flex-col flex-1 p-4 md:p-6 gap-4 overflow-y-auto">
-        <div className="flex items-center gap-3 shrink-0">
-          <button
-            onClick={onBack}
-            className="flex items-center gap-2 text-gray-500 hover:text-gray-900 transition-colors cursor-pointer font-bold text-sm bg-white border border-gray-200 px-4 py-2 rounded-xl shadow-sm"
-          >
-            <ArrowLeft size={16} />
-            Volver
-          </button>
-          <span className="text-gray-300">|</span>
-          <span className="text-gray-500 font-bold uppercase tracking-widest text-xs">Pago de Orden</span>
-        </div>
-
-        <div className="grid grid-cols-3 gap-3 shrink-0">
-          {allowed.map(m => (
-            <button
-              key={m}
-              onClick={() => {
-                setPayMethod(m)
-                setInput('')
-              }}
-              className={`flex flex-col items-center justify-center gap-2 py-4 rounded-2xl font-black text-sm transition-all cursor-pointer ${
-                payMethod === m
-                  ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/25 border-transparent'
-                  : 'bg-white text-gray-600 border border-gray-200 hover:border-blue-300 hover:text-blue-600'
-              }`}
-            >
-              <span className="text-3xl">{PAY[m].icon}</span>
-              <span className="uppercase tracking-wider text-[10px] md:text-xs">{PAY[m].label}</span>
-            </button>
-          ))}
-        </div>
-
-        <div className="bg-white rounded-3xl p-5 md:p-6 shadow-sm border border-gray-200 shrink-0">
-          <div className="flex items-end justify-between mb-4">
-            <span className="text-gray-500 text-sm font-bold uppercase tracking-widest">Restante a pagar</span>
-            <span className={`font-black text-4xl font-mono ${remaining === 0 ? 'text-green-500' : 'text-gray-900'}`}>
-              {fmt(remaining)}
+    <div className="h-full w-full flex flex-col bg-slate-100 p-2 sm:p-4 select-none overflow-hidden">
+      {/* Title Bar */}
+      <div className="bg-slate-900 text-white px-4 py-3 rounded-xl flex items-center justify-between font-bold text-base shadow-sm shrink-0 mb-3 border border-slate-800">
+        <div className="flex items-center gap-3">
+          <Button size="sm" variant="default" onClick={onBack} className="text-xs font-black py-1 px-3">
+            ← VOLVER AL PEDIDO
+          </Button>
+          <span className="text-base sm:text-lg font-black tracking-tight">
+            COBRAR CUENTA {folio ? `— ${folio}` : ''}
+          </span>
+          {mesa && (
+            <span className="bg-blue-600 text-white px-2.5 py-0.5 rounded-full text-xs font-black">
+              Mesa {mesa}
             </span>
-          </div>
-
-          <div className="h-px bg-gray-100 mb-4" />
-
-          {payMethod === 'efectivo' ? (
-            <>
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-gray-500 text-xs font-bold uppercase">Monto a ingresar</span>
-                <span className={`font-black text-3xl font-mono ${input ? 'text-blue-600' : 'text-gray-300'}`}>
-                  {input ? fmt(currentInputAmount) : '$0.00'}
-                </span>
-              </div>
-              <div className={`flex items-center justify-between rounded-2xl px-4 py-3 transition-colors ${
-                  currentInputAmount === 0 ? 'bg-gray-50' : change >= 0 ? 'bg-green-50' : 'bg-red-50'
-                }`}
-              >
-                <span className={`font-bold text-sm uppercase tracking-wide ${
-                    currentInputAmount === 0 ? 'text-gray-400' : change >= 0 ? 'text-green-600' : 'text-red-500'
-                  }`}
-                >
-                  {change >= 0 ? 'Cambio al cliente' : 'Falta para completar'}
-                </span>
-                <span className={`font-black text-xl font-mono ${
-                    currentInputAmount === 0 ? 'text-gray-400' : change >= 0 ? 'text-green-600' : 'text-red-500'
-                  }`}
-                >
-                  {currentInputAmount === 0 ? '$0.00' : fmt(Math.abs(change))}
-                </span>
-              </div>
-            </>
-          ) : (
-            <div className="flex items-center justify-center py-6 gap-4 bg-gray-50 rounded-2xl border border-gray-100">
-              <span className="text-4xl">{payMethod === 'tarjeta' ? '💳' : '📲'}</span>
-              <div>
-                <div className="font-black text-gray-800 text-lg uppercase tracking-tight">
-                  {payMethod === 'tarjeta' ? 'Pago con Tarjeta' : 'Transferencia'}
-                </div>
-                <div className="text-gray-500 text-xs font-medium mt-1">
-                  Ingresa el monto parcial, o cobra el total restante
-                </div>
-                <div className="mt-2 text-2xl font-mono font-black text-blue-600">
-                  {input ? fmt(currentInputAmount) : fmt(remaining)}
-                </div>
-              </div>
-            </div>
+          )}
+          {clienteNombre && (
+            <span className="bg-slate-700 text-white px-2.5 py-0.5 rounded-full text-xs font-bold">
+              {clienteNombre}
+            </span>
           )}
         </div>
 
-        <div className="flex gap-4 min-h-0 flex-1">
-          <div className="w-1/2 flex flex-col min-h-0">
-            <div className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-2">Teclado Numérico</div>
-            <div className="grid grid-rows-4 gap-2 flex-1">
-              {KEYS.map((row, ri) => (
-                <div key={ri} className="grid grid-cols-3 gap-2">
-                  {row.map(key => (
+        {onSendToWaiting && (
+          <Button
+            size="sm"
+            variant="warning"
+            onClick={onSendToWaiting}
+            className="text-xs font-black py-1.5 px-3 shadow-sm"
+          >
+            ENVIAR A ESPERA
+          </Button>
+        )}
+      </div>
+
+      {/* Main Grid: Responsive 3 columns on tablet/desktop, stacked on mobile */}
+      <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-3 min-h-0 overflow-y-auto lg:overflow-hidden">
+        {/* Left column: Resumen de cuenta & Cambio permanente */}
+        <div className="lg:col-span-4 flex flex-col gap-3 min-h-0">
+          <Panel title="RESUMEN DE CUENTA" className="flex-1">
+            <div className="p-4 flex flex-col h-full justify-between bg-white">
+              <div className="space-y-2.5">
+                <div className="flex justify-between items-baseline text-sm text-slate-600">
+                  <span className="font-bold">Subtotal:</span>
+                  <span className="font-mono text-base font-bold text-slate-800">{fmt(subtotal)}</span>
+                </div>
+
+                {descMonto > 0 && (
+                  <div className="flex justify-between items-baseline text-sm text-rose-600 font-bold">
+                    <span>Descuento aplicado ({descuentoPct}%):</span>
+                    <span className="font-mono text-base">-{fmt(descMonto)}</span>
+                  </div>
+                )}
+
+                <div className="flex justify-between items-baseline text-sm text-slate-600">
+                  <span className="font-bold">IVA (16% incluido):</span>
+                  <span className="font-mono text-base font-bold text-slate-800">{fmt(impuesto)}</span>
+                </div>
+
+                {/* Botón de Descuento (Pedido por el usuario: vive en Cobrar Cuenta) */}
+                <div className="pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowDiscountModal(true)}
+                    className="w-full py-2 px-3 rounded-lg border border-slate-300 bg-slate-50 hover:bg-slate-100 text-slate-700 text-xs font-black flex items-center justify-between active:scale-98 transition-all"
+                  >
+                    <span>🏷️ DESCUENTO DE LA ORDEN:</span>
+                    <span className="text-blue-700 font-black">
+                      {descuentoPct > 0 ? `${descuentoPct}% (Modificar)` : '+ Agregar descuento'}
+                    </span>
+                  </button>
+                </div>
+
+                <div className="pt-3 border-t-2 border-slate-900 flex justify-between items-baseline">
+                  <span className="font-black text-base text-slate-900">TOTAL A COBRAR:</span>
+                  <span className="font-mono text-3xl font-black text-blue-700">{fmt(total)}</span>
+                </div>
+              </div>
+
+              {/* Pagos ya aplicados */}
+              <div className="mt-4 pt-3 border-t border-slate-200 flex-1 flex flex-col min-h-0">
+                <span className="text-xs font-extrabold text-slate-500 uppercase tracking-wider mb-1.5 block">
+                  Pagos Registrados ({pagos.length}):
+                </span>
+                <div className="flex-1 overflow-y-auto space-y-1.5 p-2 bg-slate-50 rounded-xl border border-slate-200">
+                  {pagos.length === 0 ? (
+                    <div className="text-xs text-slate-400 italic p-3 text-center">
+                      Teclea el monto recibido y pulsa Aceptar.
+                    </div>
+                  ) : (
+                    pagos.map((p, idx) => (
+                      <div
+                        key={idx}
+                        className="bg-white p-2.5 rounded-lg border border-slate-200 flex items-center justify-between text-xs font-bold shadow-2xs"
+                      >
+                        <div>
+                          <span className="uppercase text-blue-800 font-black block">
+                            {p.metodo === 'efectivo'
+                              ? 'Efectivo (MXN)'
+                              : p.metodo === 'dolares'
+                              ? 'Dólares (USD)'
+                              : p.metodo === 'tarjeta'
+                              ? 'Tarjeta Bancaria'
+                              : 'Transferencia'}
+                          </span>
+                          {p.montoRecibido && p.montoRecibido > p.monto && (
+                            <span className="text-[11px] text-slate-500 block">
+                              Recibió: {fmt(p.montoRecibido)}
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono text-sm text-slate-900 font-black">{fmt(p.monto)}</span>
+                          <button
+                            type="button"
+                            onClick={() => handleRemovePayment(idx)}
+                            className="w-6 h-6 rounded-md bg-rose-50 text-rose-600 hover:bg-rose-100 font-black text-xs flex items-center justify-center transition-colors"
+                            title="Quitar pago"
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+
+              {/* Status footer: Restante & CAMBIO PERMANENTE DESTACADO */}
+              <div className="mt-3 pt-3 border-t border-slate-200 flex flex-col gap-2">
+                <div className="flex justify-between items-baseline">
+                  <span className="text-xs font-bold text-slate-500 uppercase">Restante por Cobrar:</span>
+                  <span
+                    className={`font-mono text-2xl font-black ${
+                      restanteCents === 0 ? 'text-emerald-600' : 'text-rose-600'
+                    }`}
+                  >
+                    {fmt(restante)}
+                  </span>
+                </div>
+
+                {/* ¡EL CAMBIO NUNCA SE QUITA DE LA VISTA! Banner permanente destacado */}
+                <div
+                  className={`p-3 rounded-xl border-2 flex flex-col items-center justify-center transition-all ${
+                    cambioMostrar > 0
+                      ? 'bg-emerald-500 text-white border-emerald-600 shadow-md shadow-emerald-500/25 animate-pulse'
+                      : 'bg-slate-100 text-slate-400 border-slate-200'
+                  }`}
+                >
+                  <span className="text-[11px] font-black uppercase tracking-wider opacity-90">
+                    Cambio a Devolver al Cliente:
+                  </span>
+                  <span className="text-3xl font-mono font-black tracking-tight">
+                    {cambioMostrar > 0 ? fmt(cambioMostrar) : '$0.00'}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </Panel>
+        </div>
+
+        {/* Center column: Métodos de pago (con DÓLARES abajo de Efectivo) */}
+        <div className="lg:col-span-4 flex flex-col gap-3 min-h-0">
+          <Panel title="MÉTODO DE PAGO" className="flex-1">
+            <div className="p-4 flex flex-col h-full gap-3.5 bg-slate-50">
+              {/* Method tabs: EFECTIVO, DOLARES, TARJETA, TRANSFERENCIA */}
+              <div className="grid grid-cols-1 gap-2">
+                {[
+                  { m: 'efectivo', label: '💵 EFECTIVO (MXN)', sub: 'Pesos Mexicanos' },
+                  {
+                    m: 'dolares',
+                    label: '💵 DÓLARES (USD)',
+                    sub: `Tipo de cambio: $${TIPO_CAMBIO_USD.toFixed(2)} MXN`,
+                  },
+                  { m: 'tarjeta', label: '💳 TARJETA BANCARIA', sub: 'Terminal / TPV' },
+                  { m: 'transferencia', label: '📱 TRANSFERENCIA', sub: 'SPEI / Depósito' },
+                ].map(opt => {
+                  const isSel = selectedMethod === opt.m
+                  return (
                     <button
-                      key={key}
-                      onClick={() => press(key)}
-                      className={`rounded-2xl font-black text-xl transition-all cursor-pointer shadow-sm flex items-center justify-center ${
-                        key === 'DEL'
-                          ? 'bg-red-50 border border-red-200 text-red-500 hover:bg-red-100'
-                          : 'bg-white border border-gray-200 text-gray-800 hover:bg-gray-50 hover:border-gray-300 active:bg-gray-100'
+                      key={opt.m}
+                      type="button"
+                      onClick={() => {
+                        setSelectedMethod(opt.m as any)
+                        setInputMonto('')
+                      }}
+                      className={`p-3.5 rounded-xl border-2 flex items-center justify-between transition-all active:scale-98 ${
+                        isSel
+                          ? 'bg-blue-600 text-white border-blue-700 shadow-md shadow-blue-500/20 ring-2 ring-blue-400'
+                          : 'bg-white text-slate-800 border-slate-200 hover:border-slate-300 hover:bg-slate-50'
                       }`}
                     >
-                      {key === 'DEL' ? <Trash2 size={20} /> : key}
+                      <div className="text-left">
+                        <span className="text-base font-black tracking-tight block">{opt.label}</span>
+                        <span
+                          className={`text-xs mt-0.5 block ${
+                            isSel ? 'text-blue-100' : 'text-slate-500'
+                          }`}
+                        >
+                          {opt.sub}
+                        </span>
+                      </div>
+                      {isSel && (
+                        <span className="bg-white text-blue-600 text-xs font-black w-6 h-6 rounded-full flex items-center justify-center">
+                          ✓
+                        </span>
+                      )}
                     </button>
-                  ))}
-                </div>
-              ))}
-            </div>
-          </div>
-          
-          <div className="w-1/2 flex flex-col gap-4 overflow-y-auto">
-            {payMethod === 'efectivo' ? (
-              <>
-                <div>
-                  <div className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-2">Billetes</div>
+                  )
+                })}
+              </div>
+
+              {/* Quick Cash Bills for Efectivo MXN */}
+              {selectedMethod === 'efectivo' && (
+                <div className="mt-1">
+                  <span className="text-xs font-extrabold text-slate-700 uppercase tracking-wider mb-1.5 block">
+                    Billetes Rápidos en Efectivo (MXN):
+                  </span>
                   <div className="grid grid-cols-3 gap-2">
-                    {BILLS.map(b => (
+                    {BILLS_MXN.map(b => (
                       <button
                         key={b}
-                        onClick={() => addAmount(b)}
-                        className="py-3 rounded-xl bg-white border border-gray-200 hover:border-green-400 hover:bg-green-50 text-gray-700 font-bold text-sm transition-all shadow-sm"
+                        type="button"
+                        className="h-12 rounded-xl bg-white hover:bg-slate-100 text-slate-900 border border-slate-300 font-mono text-base font-black shadow-2xs active:scale-95 transition-all"
+                        onClick={() => setInputMonto(String(b))}
                       >
                         ${b}
                       </button>
                     ))}
+                    <button
+                      type="button"
+                      className="h-12 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 font-mono text-xs font-black shadow-2xs active:scale-95 transition-all"
+                      onClick={() => setInputMonto(String(restante))}
+                    >
+                      EXACTO
+                    </button>
                   </div>
                 </div>
-                <div>
-                  <div className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-2">Monedas</div>
+              )}
+
+              {/* Quick Cash Bills for Dólares USD */}
+              {selectedMethod === 'dolares' && (
+                <div className="mt-1">
+                  <div className="bg-amber-50 border border-amber-200 rounded-xl p-2.5 mb-2 text-amber-900 text-xs">
+                    <span className="font-black block">Pago en Dólares Americanos</span>
+                    <span>1 USD = ${TIPO_CAMBIO_USD.toFixed(2)} MXN. El cambio se entrega en pesos.</span>
+                  </div>
+                  <span className="text-xs font-extrabold text-slate-700 uppercase tracking-wider mb-1.5 block">
+                    Billetes Rápidos (USD):
+                  </span>
                   <div className="grid grid-cols-3 gap-2">
-                    {COINS.map(c => (
+                    {BILLS_USD.map(b => (
                       <button
-                        key={c}
-                        onClick={() => addAmount(c)}
-                        className="py-2.5 rounded-xl bg-white border border-gray-200 hover:border-gray-400 hover:bg-gray-50 text-gray-700 font-bold text-xs transition-all shadow-sm"
+                        key={b}
+                        type="button"
+                        className="h-12 rounded-xl bg-white hover:bg-slate-100 text-slate-900 border border-slate-300 font-mono text-base font-black shadow-2xs active:scale-95 transition-all"
+                        onClick={() => setInputMonto(String(b))}
                       >
-                        {c < 1 ? `${c * 100}¢` : `$${c}`}
+                        ${b} USD
                       </button>
                     ))}
+                    <button
+                      type="button"
+                      className="h-12 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 font-mono text-xs font-black shadow-2xs active:scale-95 transition-all"
+                      onClick={() => {
+                        const usdExact = Math.ceil((restante / TIPO_CAMBIO_USD) * 100) / 100
+                        setInputMonto(String(usdExact))
+                      }}
+                    >
+                      EXACTO USD
+                    </button>
                   </div>
                 </div>
-              </>
-            ) : (
-              <div className="flex-1 flex flex-col">
-                 <div className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-2">Opciones de pago</div>
-                 <button 
-                  onClick={() => setInput(remaining.toString())}
-                  className="w-full py-4 bg-white border border-blue-200 text-blue-600 rounded-2xl font-bold hover:bg-blue-50 transition-colors shadow-sm"
-                 >
-                   Monto Restante Exacto
-                 </button>
-              </div>
-            )}
-            
-            <button 
-              onClick={applyPayment}
-              disabled={remaining <= 0}
-              className="mt-auto py-4 bg-gray-900 hover:bg-black text-white rounded-2xl font-black uppercase tracking-widest shadow-sm disabled:opacity-50 flex items-center justify-center gap-2"
-            >
-              <Plus size={18} /> Aplicar Pago
-            </button>
-          </div>
-        </div>
-      </div>
-
-      <div className="w-full md:w-80 shrink-0 flex flex-col bg-white border-l border-gray-200 shadow-2xl">
-        <div className="p-5 border-b border-gray-100 bg-gray-50 shrink-0">
-          <h3 className="font-black text-gray-900 uppercase tracking-widest">Pagos Aplicados</h3>
-        </div>
-
-        <div className="flex-1 overflow-y-auto p-4 space-y-2 bg-gray-50/50" style={{ scrollbarWidth: 'thin' }}>
-          {appliedPayments.length === 0 ? (
-            <div className="text-center text-sm font-medium text-gray-400 mt-4">
-              Aún no se han aplicado pagos.
+              )}
             </div>
-          ) : (
-            appliedPayments.map((p, i) => (
-              <div key={i} className="bg-white border border-gray-200 rounded-xl p-3 flex justify-between items-center shadow-sm">
-                <div className="flex items-center gap-2">
-                  <span className="text-xl">{PAY[p.method].icon}</span>
-                  <span className="font-bold text-gray-700 text-xs uppercase">{PAY[p.method].label}</span>
-                </div>
-                <div className="flex items-center gap-3">
-                  <span className="font-mono font-black text-gray-900">{fmt(p.amount)}</span>
-                  <button onClick={() => removePayment(i)} className="text-gray-400 hover:text-red-500 transition-colors">
-                    <X size={16} />
-                  </button>
-                </div>
-              </div>
-            ))
-          )}
+          </Panel>
         </div>
 
-        <div className="p-5 border-t border-gray-200 bg-white shrink-0">
-          <div className="flex justify-between items-end mb-2">
-            <span className="font-bold text-gray-400 text-xs uppercase tracking-widest">Total de la Orden</span>
-            <span className="font-mono text-xl font-bold text-gray-700">{fmt(total)}</span>
-          </div>
-          <div className="flex justify-between items-end mb-5">
-            <span className="font-bold text-gray-400 text-xs uppercase tracking-widest">Total Pagado</span>
-            <span className="font-mono text-xl font-bold text-blue-600">{fmt(totalPaid)}</span>
-          </div>
-          
-          <button
-            onClick={handleConfirm}
-            disabled={!canConfirm}
-            className={`w-full py-5 rounded-2xl font-black text-white text-lg uppercase tracking-wider transition-all ${
-              canConfirm 
-                ? 'bg-green-600 hover:bg-green-700 shadow-[0_8px_20px_rgba(22,163,74,0.3)]' 
-                : 'bg-gray-300 cursor-not-allowed'
-            }`}
-          >
-            {canConfirm ? 'Finalizar Pago' : 'Pago Incompleto'}
-          </button>
+        {/* Right column: Teclado Numérico con botón ACEPTAR y Botón PAGAR CUENTA */}
+        <div className="lg:col-span-4 flex flex-col gap-3 min-h-0">
+          <Panel title="IMPORTE RECIBIDO" className="flex-1">
+            <div className="p-4 flex flex-col h-full justify-between bg-white">
+              {/* Display de monto recibido */}
+              <div className="mb-2">
+                <div className="text-xs font-extrabold text-slate-600 uppercase tracking-wider mb-1 flex justify-between">
+                  <span>Monto recibido del cliente:</span>
+                  {selectedMethod === 'dolares' && inputNumber > 0 && (
+                    <span className="text-emerald-700 font-black">
+                      ≈ ${inputEnMXN.toFixed(2)} MXN
+                    </span>
+                  )}
+                </div>
+                <div className="h-14 px-4 rounded-xl flex items-center justify-end text-3xl font-mono font-black bg-slate-100 border border-slate-300 text-slate-900 shadow-inner">
+                  {inputMonto
+                    ? selectedMethod === 'dolares'
+                      ? `$${inputMonto} USD`
+                      : `$${inputMonto}`
+                    : '$0.00'}
+                </div>
+              </div>
+
+              {/* Teclado numérico táctil */}
+              <div className="flex-1 flex flex-col justify-center my-1">
+                <NumPad
+                  value={inputMonto}
+                  onChange={setInputMonto}
+                  allowDecimal={true}
+                  onEnter={handleAceptarMonto}
+                  enterLabel="ACEPTAR MONTO"
+                />
+              </div>
+
+              {/* Botón único principal: PAGAR CUENTA */}
+              <div className="pt-3 border-t border-slate-200">
+                <button
+                  type="button"
+                  disabled={!cuentaCubierta && pagos.length === 0}
+                  onClick={handlePagarCuenta}
+                  className={`w-full py-4 px-6 rounded-xl font-black text-xl tracking-wider text-white shadow-lg transition-all active:scale-98 flex items-center justify-center gap-2 ${
+                    cuentaCubierta || pagos.length > 0
+                      ? 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-600/30 cursor-pointer'
+                      : 'bg-slate-300 text-slate-500 cursor-not-allowed shadow-none'
+                  }`}
+                >
+                  <span>✓</span>
+                  <span>PAGAR CUENTA</span>
+                </button>
+              </div>
+            </div>
+          </Panel>
         </div>
       </div>
+
+      {/* Modal para Aplicar Descuento desde Cobro */}
+      {showDiscountModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs">
+          <div className="bg-white rounded-2xl p-5 max-w-sm w-full shadow-2xl border border-slate-200">
+            <span className="text-base font-black text-slate-900 block mb-1">
+              APLICAR DESCUENTO
+            </span>
+            <span className="text-xs text-slate-500 block mb-4">
+              Selecciona el porcentaje de descuento sobre la orden
+            </span>
+
+            <div className="grid grid-cols-3 gap-2 mb-4">
+              {[0, 5, 10, 15, 20, 50].map(pct => (
+                <button
+                  key={pct}
+                  type="button"
+                  onClick={() => {
+                    setDescuentoPct(pct)
+                    setShowDiscountModal(false)
+                  }}
+                  className={`py-3 rounded-xl font-black text-sm transition-all border ${
+                    descuentoPct === pct
+                      ? 'bg-blue-600 text-white border-blue-700 ring-2 ring-blue-400'
+                      : 'bg-slate-50 hover:bg-slate-100 text-slate-800 border-slate-200'
+                  }`}
+                >
+                  {pct === 0 ? 'Sin desc.' : `${pct}%`}
+                </button>
+              ))}
+            </div>
+
+            <div className="flex gap-2">
+              <Button
+                size="md"
+                variant="default"
+                className="flex-1"
+                onClick={() => setShowDiscountModal(false)}
+              >
+                CERRAR
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
