@@ -1,55 +1,128 @@
-import { X, FileText, LogOut, Coffee, Power, Users } from 'lucide-react'
+import React from 'react'
+import { UsuarioActual } from '../../types'
+import { Button } from '../ui/Button'
+import { Dialog } from '../ui/Dialog'
 
 interface ExitMenuModalProps {
+  usuario: UsuarioActual
   onClose: () => void
   onLogout: () => void
+  onOpenConsultarNotas: () => void
+  onOpenTurnos: () => void
+  onGoCocina?: () => void
+  onGoAdmin?: () => void
 }
 
-export function ExitMenuModal({ onClose, onLogout }: ExitMenuModalProps) {
+export function ExitMenuModal({
+  usuario,
+  onClose,
+  onLogout,
+  onOpenConsultarNotas,
+  onOpenTurnos,
+  onGoCocina,
+  onGoAdmin,
+}: ExitMenuModalProps) {
+  const canAdmin = usuario.permisos.some(p => ['menu', 'reportes', 'usuarios'].includes(p))
+  const canCocina = usuario.permisos.includes('cocina')
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
-      <div className="bg-[#121212] w-full max-w-md rounded-3xl overflow-hidden shadow-2xl border border-gray-800">
-        <div className="flex items-center justify-between p-5 border-b border-gray-800">
-          <h2 className="text-xl font-black text-white tracking-tight">Menú de Salida</h2>
-          <button onClick={onClose} className="p-2 text-gray-400 hover:text-white bg-gray-800 hover:bg-gray-700 rounded-full transition-colors">
-            <X size={20} />
-          </button>
+    <Dialog title="MENÚ DEL SISTEMA / SALIR" isOpen={true} onClose={onClose} maxWidth="max-w-md">
+      <div className="flex flex-col gap-3 select-none">
+        <div className="swing-inset bg-white p-2 text-xs flex justify-between items-center">
+          <span className="font-bold text-gray-700">Usuario activo:</span>
+          <span className="font-black text-[#0A246A]">{usuario.nombre} ({usuario.rol.toUpperCase()})</span>
         </div>
 
-        <div className="p-5 grid grid-cols-2 gap-3">
-          <button className="flex flex-col items-center justify-center gap-3 p-6 bg-[#1a1a1a] border border-gray-800 hover:border-blue-500/50 hover:bg-[#202020] rounded-2xl transition-all group">
-            <FileText size={32} className="text-blue-500 group-hover:scale-110 transition-transform" />
-            <span className="text-white font-bold text-sm">Consultar Notas</span>
-          </button>
-          
-          <button className="flex flex-col items-center justify-center gap-3 p-6 bg-[#1a1a1a] border border-gray-800 hover:border-yellow-500/50 hover:bg-[#202020] rounded-2xl transition-all group">
-            <Coffee size={32} className="text-yellow-500 group-hover:scale-110 transition-transform" />
-            <span className="text-white font-bold text-sm">Abrir Turno</span>
-          </button>
-
-          <button className="flex flex-col items-center justify-center gap-3 p-6 bg-[#1a1a1a] border border-gray-800 hover:border-orange-500/50 hover:bg-[#202020] rounded-2xl transition-all group">
-            <Power size={32} className="text-orange-500 group-hover:scale-110 transition-transform" />
-            <span className="text-white font-bold text-sm">Cerrar Turno</span>
-          </button>
-
-          <button 
-            onClick={onLogout}
-            className="flex flex-col items-center justify-center gap-3 p-6 bg-[#1a1a1a] border border-gray-800 hover:border-red-500/50 hover:bg-[#202020] rounded-2xl transition-all group"
+        <div className="grid grid-cols-2 gap-2">
+          <Button
+            size="lg"
+            variant="default"
+            onClick={() => {
+              onClose()
+              onOpenConsultarNotas()
+            }}
+            className="flex flex-col items-center justify-center p-3 text-center"
           >
-            <Users size={32} className="text-red-500 group-hover:scale-110 transition-transform" />
-            <span className="text-white font-bold text-sm">Cambiar Usuario</span>
-          </button>
+            <span className="text-base font-extrabold">CONSULTAR NOTAS</span>
+            <span className="text-[11px] font-normal text-gray-600">Historial y reimpresión</span>
+          </Button>
+
+          <Button
+            size="lg"
+            variant="default"
+            onClick={() => {
+              onClose()
+              onOpenTurnos()
+            }}
+            className="flex flex-col items-center justify-center p-3 text-center"
+          >
+            <span className="text-base font-extrabold">CORTE / TURNO</span>
+            <span className="text-[11px] font-normal text-gray-600">Apertura y arqueo de caja</span>
+          </Button>
+
+          {canCocina && onGoCocina && (
+            <Button
+              size="lg"
+              variant="default"
+              onClick={() => {
+                onClose()
+                onGoCocina()
+              }}
+              className="flex flex-col items-center justify-center p-3 text-center"
+            >
+              <span className="text-base font-extrabold">MONITOR COCINA</span>
+              <span className="text-[11px] font-normal text-gray-600">Ver comandas activas</span>
+            </Button>
+          )}
+
+          {canAdmin && onGoAdmin && (
+            <Button
+              size="lg"
+              variant="default"
+              onClick={() => {
+                onClose()
+                onGoAdmin()
+              }}
+              className="flex flex-col items-center justify-center p-3 text-center"
+            >
+              <span className="text-base font-extrabold">ADMINISTRACIÓN</span>
+              <span className="text-[11px] font-normal text-gray-600">Menú, usuarios, reportes</span>
+            </Button>
+          )}
+
+          <Button
+            size="lg"
+            variant="warning"
+            onClick={() => {
+              onClose()
+              onLogout()
+            }}
+            className="flex flex-col items-center justify-center p-3 text-center"
+          >
+            <span className="text-base font-black">CAMBIAR USUARIO</span>
+            <span className="text-[11px] font-normal text-amber-950">Volver a pantalla de login</span>
+          </Button>
+
+          <Button
+            size="lg"
+            variant="danger"
+            onClick={() => {
+              onClose()
+              onLogout()
+            }}
+            className="flex flex-col items-center justify-center p-3 text-center"
+          >
+            <span className="text-base font-black">CERRAR SESIÓN</span>
+            <span className="text-[11px] font-normal text-red-200">Salir del sistema</span>
+          </Button>
         </div>
-        
-        <div className="p-4 border-t border-gray-800 bg-[#1a1a1a]">
-          <button 
-            onClick={onLogout}
-            className="w-full flex items-center justify-center gap-2 py-3 bg-red-600 hover:bg-red-700 text-white font-bold rounded-xl transition-colors"
-          >
-            <LogOut size={18} /> Cerrar Sesión del Sistema
-          </button>
+
+        <div className="flex justify-end pt-2 border-t border-[#808080]">
+          <Button size="md" variant="default" onClick={onClose} className="px-6 font-bold">
+            CANCELAR
+          </Button>
         </div>
       </div>
-    </div>
+    </Dialog>
   )
 }

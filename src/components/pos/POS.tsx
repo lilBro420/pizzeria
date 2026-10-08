@@ -1,494 +1,856 @@
-import { useRef, useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import {
-  Category,
-  MenuItem,
-  Order,
-  OrderItem,
-  OrderStatus,
-  OrdersStore,
-  OrderType,
-  PayMethod,
-  PizzaDough,
-  PizzaSize,
-  Client,
-  AppliedPayment
+  Catalogo,
+  Cliente,
+  DetalleOrden,
+  Orden,
+  PizzaMasa,
+  PizzaTamano,
+  Producto,
+  TipoOrden,
+  UsuarioActual,
 } from '../../types'
-import { ORDER_TYPES } from '../../constants/orderRules'
-import { calcTotals, fmt, nowTime, uid, unitPrice } from '../../utils/formatters'
+import { api } from '../../services/api'
+import { calcTotals, fmt, uid } from '../../utils/formatters'
+import { Button } from '../ui/Button'
+import { Panel } from '../ui/Panel'
 import { CustomizerModal } from '../modals/CustomizerModal'
-import { PayScreen } from './PayScreen'
-import { MenuStore } from '../../hooks/useMenu'
-import { ClientsStore } from '../../hooks/useClients'
 import { OrderTypeModal } from '../modals/OrderTypeModal'
 import { PendingAccountsModal } from '../modals/PendingAccountsModal'
 import { ExitMenuModal } from '../modals/ExitMenuModal'
-import { 
-  LogOut, 
-  Users, 
-  Clock, 
-  Trash2, 
-  Edit3, 
-  ShoppingBag,
-  ListRestart,
-  Loader2
-} from 'lucide-react'
-
-type Paying = { kind: 'cart', type: OrderType, client?: Client, table?: string } | { kind: 'order'; id: string }
+import { CancelDialog } from '../modals/CancelDialog'
+import { TurnoModal } from '../modals/TurnoModal'
+import { ConsultarNotasModal } from '../modals/ConsultarNotasModal'
+import { PayScreen } from './PayScreen'
 
 interface POSProps {
+  usuario: UsuarioActual
   onLogout: () => void
-  ordersStore: OrdersStore
-  menuStore: MenuStore
-  clientsStore: ClientsStore
+  onGoCocina?: () => void
+  onGoAdmin?: () => void
 }
 
-export function POS({ onLogout, ordersStore, menuStore, clientsStore }: POSProps) {
-  const { orders, loading: ordersLoading, create: createOrder } = ordersStore
-  const { items: MENU, loading: menuLoading } = menuStore
+export function POS({ usuario, onLogout, onGoCocina, onGoAdmin }: POSProps) {
+  // Catálogo y estado de datos
+  const [catalogo, setCatalogo] = useState<Catalogo | null>(null)
+  const [ordenes, setOrdenes] = useState<Orden[]>([])
+  const [loading, setLoading] = useState(true)
 
-  const [category, setCategory] = useState<Category>('Todo')
-  const [order, setOrder] = useState<OrderItem[]>([])
-  
-  // States for modals
-  const [customizing, setCustomizing] = useState<{item: MenuItem, initial?: OrderItem} | null>(null)
+  // Categoría seleccionada ('todo' o id_categoria)
+  const [selectedCat, setSelectedCat] = useState<number | 'todo' | 'paquetes'>('todo')
+
+  // Carrito / ticket en curso
+  const [cart, setCart] = useState<DetalleOrden[]>([])
+  const [descuentoPct, setDescuentoPct] = useState(0)
+  const [comentariosOrden, setComentariosOrden] = useState('')
+
+  // Modales
+  const [customizingProduct, setCustomizingProduct] = useState<{
+    item: Producto
+    isPizza: boolean
+    cartIndex?: number
+  } | null>(null)
+  const [editingCartItemNote, setEditingCartItemNote] = useState<number | null>(null)
+  const [itemNoteInput, setItemNoteInput] = useState('')
+
   const [showOrderType, setShowOrderType] = useState(false)
   const [showPending, setShowPending] = useState(false)
   const [showExit, setShowExit] = useState(false)
-  
-  const [discount, setDiscount] = useState(0)
-  const [showDiscountInput, setShowDiscountInput] = useState(false)
-  const [discountInput, setDiscountInput] = useState('')
-  
-  const [paying, setPaying] = useState<Paying | null>(null)
-  const [toast, setToast] = useState<string | null>(null)
-  const toastTimer = useRef<number | undefined>(undefined)
+  const [showTurno, setShowTurno] = useState(false)
+  const [showNotas, setShowNotas] = useState(false)
+  const [cancelTarget, setCancelTarget] = useState<Orden | null>(null)
 
-  const notify = (msg: string, ms = 2500) => {
-    setToast(msg)
-    window.clearTimeout(toastTimer.current)
-    toastTimer.current = window.setTimeout(() => setToast(null), ms)
+  // Pantalla de pago activa
+  const [payScreenState, setPayScreenState] = useState<{
+    isCart: boolean
+    tipo: TipoOrden
+    mesa: string | null
+    cliente: Cliente | null
+    ordenId?: number
+    total: number
+    subtotal: number
+    descuento: number
+    impuesto: number
+    folio?: string
+  } | null>(null)
+
+  // Carga inicial y sondeo de órdenes abiertas
+  const loadData = async () => {
+    try {
+      const [catData, ordData] = await Promise.all([api.getCatalogo(), api.getOrdenes({ limit: 100 })])
+      setCatalogo(catData)
+      setOrdenes(ordData)
+    } catch (err: any) {
+      console.error('Error al sincronizar POS:', err)
+    } finally {
+      setLoading(false)
+    }
   }
 
-  if (ordersLoading || menuLoading) {
+  useEffect(() => {
+    loadData()
+    const timer = setInterval(async () => {
+      try {
+        const ordData = await api.getOrdenes({ limit: 100 })
+        setOrdenes(ordData)
+      } catch {
+        // Error temporal ignorado
+      }
+    }, 5000)
+    return () => clearInterval(timer)
+  }, [])
+
+  if (loading || !catalogo) {
     return (
-      <div className="flex h-screen items-center justify-center bg-[#f5f5f7] flex-col gap-4 text-red-600">
-        <Loader2 className="animate-spin" size={48} />
-        <span className="font-bold tracking-widest uppercase text-sm">Cargando datos...</span>
+      <div className="h-screen w-screen flex flex-col items-center justify-center bg-[#D4D0C8] text-black font-bold select-none">
+        <div className="p-8 swing-outset bg-[#ECE9D8] text-center border-2 border-black">
+          <span className="text-xl block mb-2 text-[#0A246A]">PIZZERÍA VOLCÁN — POS</span>
+          <span className="text-sm text-gray-700">Cargando catálogo y mesas desde el servidor...</span>
+        </div>
       </div>
     )
   }
 
-  // ── Derivados ──
-  const filtered = category === 'Todo' ? MENU : MENU.filter(i => i.category === category)
-  const { total } = calcTotals(order, discount)
-  const totalItems = order.reduce((s, i) => s + i.qty, 0)
-  const ready = order.length > 0
-  
-  const pendingPaymentCount = orders.filter(o => o.payMethod === null && o.status !== 'entregado' && o.status !== 'cancelado').length
+  // Cálculos de totales del ticket en centavos enteros
+  const cfg = catalogo.config
+  const { subtotal, descuento, impuesto, total } = calcTotals(
+    cart,
+    descuentoPct,
+    cfg.ivaTasa,
+    cfg.ivaIncluido
+  )
 
-  // ── Carrito ──
-  const handleItemClick = (item: MenuItem) => {
-    setCustomizing({ item })
+  const cuentasEnEspera = ordenes.filter(o => o.estado === 'abierta')
+
+  // Manejo de productos en el menú
+  const handleProductClick = (prod: Producto) => {
+    const cat = catalogo.categorias.find(c => c.id === prod.idCategoria)
+    const isPizza = cat?.nombre.toLowerCase().includes('pizza') ?? false
+
+    // Abre el modal para configurar cantidad, tamaño, masa y notas de cocina
+    setCustomizingProduct({ item: prod, isPizza })
   }
 
-  const handleEditItem = (oi: OrderItem) => {
-    setCustomizing({ item: oi.item, initial: oi })
-  }
+  const handleConfirmCustomizer = (
+    qty: number,
+    size?: PizzaTamano | null,
+    dough?: PizzaMasa | null,
+    comments?: string | null
+  ) => {
+    if (!customizingProduct) return
+    const { item, isPizza } = customizingProduct
 
-  const confirmCustomize = (qty: number, size?: PizzaSize, dough?: PizzaDough, comments?: string) => {
-    if (!customizing) return
-    
-    if (customizing.initial) {
-      setOrder(prev => prev.map(i => {
-        if (i.uid === customizing.initial!.uid) {
-          return {
-            ...i,
-            qty,
-            size,
-            dough,
-            comments,
-            finalPrice: customizing.item.category === 'pizzas' ? unitPrice(customizing.item, size, dough) : customizing.item.basePrice
-          }
-        }
-        return i
-      }))
-    } else {
-      setOrder(prev => [
-        ...prev,
-        { 
-          uid: uid(), 
-          item: customizing.item, 
-          qty, 
-          size, 
-          dough, 
-          comments, 
-          finalPrice: customizing.item.category === 'pizzas' ? unitPrice(customizing.item, size, dough) : customizing.item.basePrice 
-        },
-      ])
+    const sizeExtra = isPizza && size ? cfg.extras[size] ?? 0 : 0
+    const doughExtra = isPizza && dough ? cfg.extras[dough] ?? 0 : 0
+    const precioFinal = Math.max(0, item.precio + sizeExtra + doughExtra)
+
+    const line: DetalleOrden = {
+      uid: uid(),
+      idProducto: item.id,
+      nombre: item.nombre,
+      categoria: catalogo.categorias.find(c => c.id === item.idCategoria)?.nombre,
+      cantidad: qty,
+      tamano: size,
+      masa: dough,
+      notas: comments,
+      precioUnitario: item.precio,
+      precioFinal,
     }
-    setCustomizing(null)
+
+    setCart([...cart, line])
+    setCustomizingProduct(null)
   }
 
-  const removeItem = (u: string) => setOrder(prev => prev.filter(i => i.uid !== u))
-
-  const clearCart = () => {
-    setOrder([])
-    setDiscount(0)
-    setShowDiscountInput(false)
-    setDiscountInput('')
+  const handleAddPaquete = (paq: any) => {
+    const line: DetalleOrden = {
+      uid: uid(),
+      idPaquete: paq.id,
+      nombre: paq.nombre,
+      categoria: 'Paquetes',
+      cantidad: 1,
+      precioUnitario: paq.precio,
+      precioFinal: paq.precio,
+    }
+    setCart([...cart, line])
   }
 
-  const applyDiscount = () => {
-    const v = parseFloat(discountInput)
-    if (!isNaN(v) && v >= 0 && v <= 100) setDiscount(v)
-    setShowDiscountInput(false)
-    setDiscountInput('')
+  const handleRemoveCartItem = (index: number) => {
+    setCart(cart.filter((_, idx) => idx !== index))
   }
 
-  // ── Órdenes ──
-  const handleOrderTypeConfirm = (orderType: OrderType, client?: Client, table?: string) => {
+  const handleSaveItemNote = (index: number) => {
+    const updated = [...cart]
+    updated[index].notas = itemNoteInput.trim() ? itemNoteInput.trim() : null
+    setCart(updated)
+    setEditingCartItemNote(null)
+    setItemNoteInput('')
+  }
+
+  // Flujo al hacer clic en "PAGAR CUENTA"
+  const handleStartPay = () => {
+    if (cart.length === 0) {
+      alert('Agrega al menos un producto a la orden antes de continuar.')
+      return
+    }
+    setShowOrderType(true)
+  }
+
+  const handleConfirmOrderType = async (data: {
+    tipo: TipoOrden
+    mesa: string | null
+    cliente: Cliente | null
+    payNow: boolean
+  }) => {
     setShowOrderType(false)
-    if (ORDER_TYPES[orderType].payUpfront) {
-      setPaying({ kind: 'cart', type: orderType, client, table })
-    } else {
-      submitOrder(null, orderType, client, table)
-    }
-  }
 
-  const submitOrder = async (payMethod: PayMethod | null, orderType: OrderType, client?: Client, table?: string, paymentDetails?: any) => {
-    try {
-      const id = await createOrder({
-        items: order,
-        discount,
+    if (data.payNow) {
+      // Abre pantalla de pago de inmediato
+      setPayScreenState({
+        isCart: true,
+        tipo: data.tipo,
+        mesa: data.mesa,
+        cliente: data.cliente,
         total,
-        payMethod,
-        status: 'preparando',
-        time: nowTime(),
-        cashier: 'Cajero',
-        orderType,
-        client,
-        table
-      }, paymentDetails)
-      
-      clearCart()
-      if (payMethod) {
-        notify(`✅ Orden ${id} cobrada y enviada a cocina`, 3500)
-      } else {
-        notify(`📝 Orden ${id} enviada a cocina (Cuenta en espera)`, 3500)
-      }
-    } catch (err: any) {
-      alert(`Error al crear orden: ${err.message}`)
-    }
-  }
-
-  const handlePayConfirm = async (payments: AppliedPayment[]) => {
-    if (!paying) return
-    const mainMethod = payments.length > 0 ? payments[0].method : 'efectivo'
-    const totalPaid = payments.reduce((s, p) => s + p.amount, 0)
-    
-    // Simplificación para API: mandamos montoRecibido y asume el primer método
-    const paymentDetails = { montoRecibido: totalPaid }
-
-    if (paying.kind === 'cart') {
-      await submitOrder(mainMethod, paying.type, paying.client, paying.table, paymentDetails)
+        subtotal,
+        descuento,
+        impuesto,
+      })
     } else {
+      // Envía directo a cuenta en espera (unpaid, sent to kitchen)
       try {
-        await ordersStore.collect(paying.id, payments, paymentDetails)
-        notify(`✅ Orden cobrada exitosamente`, 3500)
-        setShowPending(false)
+        setLoading(true)
+        const payload = {
+          tipo: data.tipo,
+          mesa: data.mesa,
+          cliente: data.cliente
+            ? {
+                celular: data.cliente.celular,
+                nombre: data.cliente.nombre,
+                direccion_principal: data.cliente.direccion,
+                referencias: data.cliente.referencias,
+              }
+            : null,
+          descuentoPct,
+          comentarios: comentariosOrden || null,
+          items: cart.map(i => ({
+            idProducto: i.idProducto,
+            idPaquete: i.idPaquete,
+            cantidad: i.cantidad,
+            tamano: i.tamano,
+            masa: i.masa,
+            notas: i.notas,
+          })),
+          claveIdempotencia: `cart-${Date.now()}-${Math.random()}`,
+        }
+
+        const ordenCreada = await api.createOrden(payload)
+        alert(`✓ Orden ${ordenCreada.folio} enviada a cocina (Cuenta en Espera).`)
+        setCart([])
+        setDescuentoPct(0)
+        setComentariosOrden('')
+        await loadData()
       } catch (err: any) {
-        alert(`Error al cobrar orden: ${err.message}`)
+        alert(`Error al guardar cuenta en espera: ${err.message}`)
+      } finally {
+        setLoading(false)
       }
     }
-    setPaying(null)
   }
 
-  const payingOrder = paying?.kind === 'order' ? orders.find(o => o.id === paying.id) : undefined
+  // Confirmar cobro desde PayScreen
+  const handleConfirmPaymentFromPayScreen = async (pagosList: any[]) => {
+    if (!payScreenState) return
 
-  if (paying && (paying.kind === 'cart' || payingOrder)) {
-    const src = payingOrder ?? { items: order, orderType: (paying as any).type, discount }
-    const t = calcTotals(src.items, src.discount)
+    try {
+      setLoading(true)
+
+      if (payScreenState.isCart) {
+        // Crear orden y cobrar al mismo tiempo
+        const payload = {
+          tipo: payScreenState.tipo,
+          mesa: payScreenState.mesa,
+          cliente: payScreenState.cliente
+            ? {
+                celular: payScreenState.cliente.celular,
+                nombre: payScreenState.cliente.nombre,
+                direccion_principal: payScreenState.cliente.direccion,
+                referencias: payScreenState.cliente.referencias,
+              }
+            : null,
+          descuentoPct,
+          comentarios: comentariosOrden || null,
+          items: cart.map(i => ({
+            idProducto: i.idProducto,
+            idPaquete: i.idPaquete,
+            cantidad: i.cantidad,
+            tamano: i.tamano,
+            masa: i.masa,
+            notas: i.notas,
+          })),
+          pagos: pagosList,
+          claveIdempotencia: `pay-${Date.now()}-${Math.random()}`,
+        }
+
+        const orden = await api.createOrden(payload)
+        alert(`✓ Orden ${orden.folio} cobrada exitosamente e impresa.`)
+        setCart([])
+        setDescuentoPct(0)
+        setComentariosOrden('')
+        setPayScreenState(null)
+      } else if (payScreenState.ordenId) {
+        // Cobrar una cuenta en espera existente
+        const orden = await api.pagarOrden(payScreenState.ordenId, {
+          pagos: pagosList,
+        })
+        alert(`✓ Cuenta ${orden.folio} cobrada exitosamente.`)
+        setPayScreenState(null)
+      }
+
+      await loadData()
+    } catch (err: any) {
+      alert(`Error al procesar el cobro: ${err.message}`)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // Cobrar una cuenta en espera desde el modal
+  const handlePayPendingOrder = (orden: Orden) => {
+    setShowPending(false)
+    setPayScreenState({
+      isCart: false,
+      tipo: orden.tipo,
+      mesa: orden.mesa,
+      cliente: orden.cliente,
+      ordenId: orden.id,
+      total: orden.total,
+      subtotal: orden.subtotal,
+      descuento: orden.descuento,
+      impuesto: orden.impuesto,
+      folio: orden.folio,
+    })
+  }
+
+  // Cancelar una orden
+  const handleConfirmCancelOrder = async (payload: any) => {
+    if (!cancelTarget) return
+    try {
+      setLoading(true)
+      await api.cancelarOrden(cancelTarget.id, payload)
+      alert(`✓ Orden ${cancelTarget.folio} ha sido anulada.`)
+      setCancelTarget(null)
+      await loadData()
+    } catch (err: any) {
+      alert(`Error al anular orden: ${err.message}`)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // Si PayScreen está activo, se muestra a pantalla completa
+  if (payScreenState) {
     return (
       <PayScreen
-        order={src.items}
-        orderType={src.orderType}
-        total={t.total}
-        discount={src.discount}
-        discountAmt={t.discountAmt}
-        onConfirm={handlePayConfirm}
-        onBack={() => setPaying(null)}
+        total={payScreenState.total}
+        subtotal={payScreenState.subtotal}
+        descuento={payScreenState.descuento}
+        impuesto={payScreenState.impuesto}
+        folio={payScreenState.folio}
+        mesa={payScreenState.mesa}
+        clienteNombre={payScreenState.cliente?.nombre}
+        onConfirm={handleConfirmPaymentFromPayScreen}
+        onSendToWaiting={
+          payScreenState.isCart
+            ? () => {
+                handleConfirmOrderType({
+                  tipo: payScreenState.tipo,
+                  mesa: payScreenState.mesa,
+                  cliente: payScreenState.cliente,
+                  payNow: false,
+                })
+                setPayScreenState(null)
+              }
+            : undefined
+        }
+        onBack={() => setPayScreenState(null)}
       />
     )
   }
 
+  // Filtrado de productos para la categoría actual
+  const currentProds = catalogo.productos.filter(p => {
+    if (selectedCat === 'todo') return true
+    if (selectedCat === 'paquetes') return false
+    return p.idCategoria === selectedCat
+  })
+
   return (
-    <div className="flex flex-col h-screen overflow-hidden bg-[#f5f5f7] font-sans">
-      <header className="flex items-center justify-between px-4 md:px-6 h-16 bg-white border-b border-gray-200 shrink-0 shadow-sm">
+    <div className="h-screen w-screen flex flex-col bg-[#D4D0C8] p-2 select-none overflow-hidden">
+      {/* ── Top Bar ── */}
+      <div className="bg-[#0A246A] text-white px-3 py-1.5 flex items-center justify-between border-2 border-black swing-outset shrink-0 mb-2">
         <div className="flex items-center gap-3">
-          <span className="text-3xl">🍕</span>
-          <div className="hidden md:block">
-            <span className="font-black text-gray-900 text-lg tracking-tight block leading-none">Pizzería Volcán</span>
-            <span className="text-gray-400 text-xs font-medium uppercase tracking-widest">Punto de Venta</span>
-          </div>
+          <span className="text-xl font-black tracking-wide font-sans">PIZZERÍA VOLCÁN</span>
+          <span className="text-xs bg-[#1F4E79] px-2 py-0.5 font-mono text-gray-200">
+            Cajero: {usuario.nombre} ({usuario.rol.toUpperCase()})
+          </span>
         </div>
-        <div className="flex items-center gap-2 md:gap-4">
-          <button
+
+        <div className="flex items-center gap-2">
+          {/* Cuentas en Espera Button */}
+          <Button
+            size="sm"
+            variant="warning"
             onClick={() => setShowPending(true)}
-            className="flex items-center gap-2 text-xs md:text-sm font-bold px-4 py-2.5 rounded-xl border border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100 transition-colors shadow-sm"
+            className="text-xs font-black py-1 px-3"
           >
-            <Clock size={18} />
-            <span className="hidden sm:inline">Cuentas en espera</span>
-            {pendingPaymentCount > 0 && (
-              <span className="bg-amber-500 text-white px-2 py-0.5 rounded-full text-[10px] leading-none ml-1">
-                {pendingPaymentCount}
-              </span>
-            )}
-          </button>
+            CUENTAS EN ESPERA ({cuentasEnEspera.length})
+          </Button>
 
-          <button className="hidden sm:flex items-center gap-2 text-sm font-bold text-gray-600 hover:text-gray-900 px-4 py-2.5 rounded-xl border border-gray-200 hover:bg-gray-50 transition-colors shadow-sm">
-            <Users size={18} />
-            Clientes
-          </button>
-          
-          <button
+          {/* Turno Button */}
+          <Button
+            size="sm"
+            variant="default"
+            onClick={() => setShowTurno(true)}
+            className="text-xs font-bold py-1 px-3"
+          >
+            TURNO / CAJA
+          </Button>
+
+          {/* Salir Button */}
+          <Button
+            size="sm"
+            variant="danger"
             onClick={() => setShowExit(true)}
-            className="flex items-center gap-2 text-sm font-bold text-red-600 hover:text-red-700 px-4 py-2.5 rounded-xl border border-red-200 hover:bg-red-50 transition-colors shadow-sm"
+            className="text-xs font-black py-1 px-3"
           >
-            <LogOut size={18} />
-            <span className="hidden sm:inline">Salir</span>
-          </button>
-        </div>
-      </header>
-
-      <div className="flex flex-col lg:flex-row flex-1 overflow-hidden gap-3 lg:gap-4 p-3 lg:p-4">
-        <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
-          <div className="flex overflow-x-auto gap-2 md:gap-3 mb-4 shrink-0 pb-2 scrollbar-hide">
-            {(['Todo', 'pizzas', 'snacks', 'bebidas', 'paquetes'] as Category[]).map(cat => (
-              <button
-                key={cat}
-                onClick={() => setCategory(cat)}
-                className={`px-5 md:px-8 py-3 rounded-2xl text-sm md:text-base font-black uppercase tracking-wide whitespace-nowrap transition-all shadow-sm ${
-                  category === cat
-                    ? 'bg-red-600 text-white shadow-red-900/20 shadow-lg'
-                    : 'bg-white text-gray-500 hover:bg-gray-50 border border-gray-200'
-                }`}
-              >
-                {cat}
-              </button>
-            ))}
-          </div>
-
-          <div
-            className="flex-1 overflow-y-auto pr-2"
-            style={{ scrollbarWidth: 'thin', scrollbarColor: '#cbd5e1 transparent' }}
-          >
-            {category === 'Todo' && (
-              <div className="mb-6 grid grid-cols-1 sm:grid-cols-4 gap-3 md:gap-4">
-                <button onClick={() => setCategory('pizzas')} className="bg-white border border-gray-200 rounded-3xl p-6 text-center hover:shadow-lg hover:border-red-300 transition-all group">
-                  <div className="text-6xl mb-3 group-hover:scale-110 transition-transform">🍕</div>
-                  <h3 className="font-black text-xl text-gray-800">Pizzas</h3>
-                </button>
-                <button onClick={() => setCategory('snacks')} className="bg-white border border-gray-200 rounded-3xl p-6 text-center hover:shadow-lg hover:border-yellow-300 transition-all group">
-                  <div className="text-6xl mb-3 group-hover:scale-110 transition-transform">🍟</div>
-                  <h3 className="font-black text-xl text-gray-800">Snacks</h3>
-                </button>
-                <button onClick={() => setCategory('bebidas')} className="bg-white border border-gray-200 rounded-3xl p-6 text-center hover:shadow-lg hover:border-blue-300 transition-all group">
-                  <div className="text-6xl mb-3 group-hover:scale-110 transition-transform">🥤</div>
-                  <h3 className="font-black text-xl text-gray-800">Bebidas</h3>
-                </button>
-                <button onClick={() => setCategory('paquetes')} className="bg-white border border-gray-200 rounded-3xl p-6 text-center hover:shadow-lg hover:border-purple-300 transition-all group">
-                  <div className="text-6xl mb-3 group-hover:scale-110 transition-transform">📦</div>
-                  <h3 className="font-black text-xl text-gray-800">Paquetes</h3>
-                </button>
-              </div>
-            )}
-
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 pb-10">
-              {filtered.map(item => (
-                <div
-                  key={item.id}
-                  onClick={() => handleItemClick(item)}
-                  className="bg-white rounded-3xl p-4 md:p-5 flex flex-col items-center text-center shadow-sm border border-gray-200 hover:border-red-400 hover:shadow-lg hover:shadow-red-900/5 transition-all cursor-pointer group"
-                >
-                  <span className="text-5xl mb-3 group-hover:scale-110 transition-transform">{item.emoji}</span>
-                  <span className="font-black text-gray-900 text-sm md:text-base leading-tight mb-1">{item.name}</span>
-                  <span className="text-gray-400 text-[10px] md:text-xs leading-snug line-clamp-2 mb-3">
-                    {item.desc}
-                  </span>
-                  <span className="mt-auto font-black font-mono text-base md:text-lg text-red-600 bg-red-50 px-3 py-1 rounded-xl">
-                    {fmt(item.basePrice)}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        <div className="w-full lg:w-80 xl:w-96 shrink-0 flex flex-col bg-white rounded-3xl overflow-hidden shadow-2xl border border-gray-200">
-          <div className="px-5 py-4 shrink-0 flex items-center justify-between border-b border-gray-100 bg-gray-50/50">
-            <div className="flex items-center gap-2">
-              <ShoppingBag className="text-red-500" size={24} />
-              <span className="font-black text-lg text-gray-900 uppercase tracking-tight">
-                Orden Actual
-              </span>
-            </div>
-            {totalItems > 0 && (
-              <span className="bg-red-100 text-red-700 text-xs font-black px-3 py-1 rounded-full border border-red-200">
-                {totalItems} items
-              </span>
-            )}
-          </div>
-
-          <div className="flex-1 overflow-y-auto px-4 py-2" style={{ scrollbarWidth: 'thin' }}>
-            {order.length === 0 ? (
-              <div className="flex flex-col items-center justify-center h-full gap-4 opacity-40">
-                <ListRestart size={48} />
-                <span className="text-gray-500 text-sm font-medium text-center">
-                  La orden está vacía.<br/>Selecciona productos del menú.
-                </span>
-              </div>
-            ) : (
-              <div className="space-y-3 pt-2 pb-4">
-                {order.map(oi => (
-                  <div key={oi.uid} className="bg-gray-50 border border-gray-200 rounded-2xl p-3 flex gap-3">
-                    <span className="text-2xl mt-1 shrink-0">{oi.item.emoji}</span>
-                    <div className="flex-1 min-w-0">
-                      <div className="font-bold text-gray-900 text-sm leading-tight mb-0.5">
-                        {oi.qty}× {oi.item.name}
-                      </div>
-                      {(oi.size || oi.dough) && (
-                        <div className="text-xs text-gray-500 mb-1">
-                          {[oi.size, oi.dough].filter(Boolean).join(' · ')}
-                        </div>
-                      )}
-                      {oi.comments && (
-                        <div className="text-[10px] text-amber-600 bg-amber-50 border border-amber-100 rounded-md px-2 py-1 mb-1 italic line-clamp-2">
-                          "{oi.comments}"
-                        </div>
-                      )}
-                      <div className="font-black font-mono text-sm text-gray-900 mt-1">
-                        {fmt(oi.finalPrice * oi.qty)}
-                      </div>
-                    </div>
-                    <div className="flex flex-col items-end gap-2 shrink-0 justify-between">
-                      <button onClick={() => removeItem(oi.uid)} className="text-gray-400 hover:text-red-500 hover:bg-red-50 p-1.5 rounded-lg transition-colors">
-                        <Trash2 size={16} />
-                      </button>
-                      <button onClick={() => handleEditItem(oi)} className="text-gray-400 hover:text-blue-500 hover:bg-blue-50 p-1.5 rounded-lg transition-colors">
-                        <Edit3 size={16} />
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          <div className="p-5 border-t border-gray-200 bg-gray-50 shrink-0">
-            {discount > 0 && (
-              <div className="flex justify-between text-sm text-green-600 mb-2 font-bold">
-                <span>Descuento ({discount}%)</span>
-                <span className="font-mono">-{fmt(total * (discount/100))}</span>
-              </div>
-            )}
-            
-            <div className="flex justify-between items-end mb-4">
-              <span className="font-black text-gray-400 uppercase tracking-widest text-xs">Total</span>
-              <span className="font-black text-3xl text-gray-900 font-mono leading-none">{fmt(total)}</span>
-            </div>
-
-            <button
-              onClick={() => setShowOrderType(true)}
-              disabled={!ready}
-              className={`w-full py-4 rounded-xl font-black text-white text-base md:text-lg uppercase tracking-wider transition-all ${
-                ready 
-                  ? 'bg-red-600 hover:bg-red-700 shadow-[0_8px_20px_rgba(220,38,38,0.3)]' 
-                  : 'bg-gray-300 cursor-not-allowed'
-              }`}
-            >
-              Pagar Cuenta
-            </button>
-
-            <div className="flex items-center justify-center gap-4 mt-4">
-              <button
-                onClick={() => setShowDiscountInput(v => !v)}
-                disabled={order.length === 0}
-                className="text-xs font-bold text-gray-500 hover:text-gray-800 disabled:opacity-40 transition-colors"
-              >
-                % Aplicar Descuento
-              </button>
-              <span className="text-gray-300">|</span>
-              <button
-                onClick={clearCart}
-                disabled={!ready}
-                className="text-xs font-bold text-red-400 hover:text-red-600 disabled:opacity-40 transition-colors"
-              >
-                Vaciar Orden
-              </button>
-            </div>
-            
-            {showDiscountInput && (
-              <div className="flex gap-2 mt-3 p-3 bg-white border border-gray-200 rounded-xl">
-                <input
-                  type="number"
-                  min="0"
-                  max="100"
-                  placeholder="Porcentaje %"
-                  value={discountInput}
-                  onChange={e => setDiscountInput(e.target.value)}
-                  className="flex-1 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-sm font-mono focus:border-red-500 outline-none"
-                />
-                <button
-                  onClick={applyDiscount}
-                  className="px-4 py-2 rounded-lg bg-gray-900 text-white font-bold text-xs"
-                >
-                  OK
-                </button>
-              </div>
-            )}
-          </div>
+            SALIR
+          </Button>
         </div>
       </div>
 
-      {customizing && (
+      {/* ── Main Layout: Menu Left (62%), Cart Right (38%) ── */}
+      <div className="flex-1 grid grid-cols-12 gap-2 min-h-0">
+        {/* Left Side: Category Tabs & Products Grid */}
+        <div className="col-span-8 flex flex-col min-h-0 gap-2">
+          {/* Category Tabs Bar */}
+          <div className="flex gap-1.5 shrink-0 overflow-x-auto pb-1">
+            <Button
+              size="md"
+              variant="tab"
+              active={selectedCat === 'todo'}
+              onClick={() => setSelectedCat('todo')}
+              className="text-sm font-black min-w-[90px]"
+            >
+              TODO
+            </Button>
+
+            {catalogo.categorias.map(cat => (
+              <Button
+                key={cat.id}
+                size="md"
+                variant="tab"
+                active={selectedCat === cat.id}
+                onClick={() => setSelectedCat(cat.id)}
+                className="text-sm font-black min-w-[100px]"
+                style={
+                  selectedCat === cat.id
+                    ? { borderTopColor: cat.color, borderTopWidth: '4px' }
+                    : {}
+                }
+              >
+                {cat.nombre.toUpperCase()}
+              </Button>
+            ))}
+
+            <Button
+              size="md"
+              variant="tab"
+              active={selectedCat === 'paquetes'}
+              onClick={() => setSelectedCat('paquetes')}
+              className="text-sm font-black min-w-[100px]"
+            >
+              PAQUETES
+            </Button>
+          </div>
+
+          {/* Main Menu Panel */}
+          <Panel className="flex-1">
+            <div className="p-2 flex-1 overflow-y-auto bg-[#ECE9D8] swing-inset">
+              {/* When in "TODO": Show Category Big Cards first */}
+              {selectedCat === 'todo' && (
+                <div className="mb-3">
+                  <span className="text-xs font-black text-gray-700 uppercase tracking-wider mb-1.5 block">
+                    Categorías Principales (Toca para ir):
+                  </span>
+                  <div className="grid grid-cols-4 gap-2">
+                    {catalogo.categorias.map(cat => (
+                      <button
+                        key={cat.id}
+                        type="button"
+                        onClick={() => setSelectedCat(cat.id)}
+                        className="swing-button flex flex-col items-center justify-center p-3 text-center min-h-[72px]"
+                        style={{ borderTop: `4px solid ${cat.color}` }}
+                      >
+                        <span className="text-base font-black text-black">{cat.nombre.toUpperCase()}</span>
+                        <span className="text-xs text-gray-600 font-bold">
+                          {catalogo.productos.filter(p => p.idCategoria === cat.id).length} productos
+                        </span>
+                      </button>
+                    ))}
+                    <button
+                      type="button"
+                      onClick={() => setSelectedCat('paquetes')}
+                      className="swing-button flex flex-col items-center justify-center p-3 text-center min-h-[72px]"
+                      style={{ borderTop: '4px solid #4A148C' }}
+                    >
+                      <span className="text-base font-black text-black">PAQUETES</span>
+                      <span className="text-xs text-gray-600 font-bold">
+                        {catalogo.paquetes.length} combos
+                      </span>
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Products Grid */}
+              {selectedCat !== 'paquetes' && (
+                <div>
+                  {selectedCat === 'todo' && (
+                    <span className="text-xs font-black text-gray-700 uppercase tracking-wider mb-1.5 block">
+                      Todos los Productos:
+                    </span>
+                  )}
+                  <div className="grid grid-cols-3 xl:grid-cols-4 gap-2">
+                    {currentProds.map(prod => {
+                      const cat = catalogo.categorias.find(c => c.id === prod.idCategoria)
+                      const catColor = cat?.color || '#0A246A'
+                      return (
+                        <button
+                          key={prod.id}
+                          type="button"
+                          onClick={() => handleProductClick(prod)}
+                          className="swing-button flex flex-col justify-between p-3 min-h-[84px] text-left"
+                          style={{ borderLeft: `6px solid ${catColor}` }}
+                        >
+                          <div>
+                            <span className="text-base font-black text-black block leading-tight">
+                              {prod.nombre}
+                            </span>
+                            {prod.descripcion && (
+                              <span className="text-[11px] text-gray-600 font-normal line-clamp-1">
+                                {prod.descripcion}
+                              </span>
+                            )}
+                          </div>
+                          <span className="text-lg font-black font-mono text-[#0A246A] mt-2">
+                            {fmt(prod.precio)}
+                          </span>
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Combos/Packages Grid */}
+              {(selectedCat === 'paquetes' || selectedCat === 'todo') && catalogo.paquetes.length > 0 && (
+                <div className="mt-3">
+                  <span className="text-xs font-black text-gray-700 uppercase tracking-wider mb-1.5 block">
+                    Paquetes y Combos:
+                  </span>
+                  <div className="grid grid-cols-3 gap-2">
+                    {catalogo.paquetes.map(paq => (
+                      <button
+                        key={paq.id}
+                        type="button"
+                        onClick={() => handleAddPaquete(paq)}
+                        className="swing-button flex flex-col justify-between p-3 min-h-[84px] text-left border-l-[6px] border-l-[#4A148C]"
+                      >
+                        <div>
+                          <span className="text-base font-black text-black block leading-tight">
+                            {paq.nombre}
+                          </span>
+                          {paq.descripcion && (
+                            <span className="text-[11px] text-gray-600 font-normal line-clamp-2">
+                              {paq.descripcion}
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex justify-between items-baseline mt-2">
+                          <span className="text-lg font-black font-mono text-[#0A246A]">
+                            {fmt(paq.precio)}
+                          </span>
+                          {paq.precioIndividual && paq.precioIndividual > paq.precio && (
+                            <span className="text-[10px] text-green-700 font-bold">
+                              Ahorro: {fmt(paq.precioIndividual - paq.precio)}
+                            </span>
+                          )}
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </Panel>
+        </div>
+
+        {/* Right Side: Order Ticket & Totals (38%) */}
+        <div className="col-span-4 flex flex-col min-h-0">
+          <Panel
+            title="TICKET DE VENTA"
+            headerRight={
+              <span className="text-xs font-mono font-bold bg-[#1F4E79] px-2 py-0.5">
+                {cart.length} {cart.length === 1 ? 'artículo' : 'artículos'}
+              </span>
+            }
+            className="flex-1"
+          >
+            <div className="flex-1 flex flex-col justify-between bg-white swing-inset min-h-0 p-2">
+              {/* Lines list */}
+              <div className="flex-1 overflow-y-auto space-y-1.5 pr-1">
+                {cart.length === 0 ? (
+                  <div className="h-full flex flex-col items-center justify-center text-gray-400 font-bold text-center p-4">
+                    <span className="text-lg block mb-1">LA ORDEN ESTÁ VACÍA</span>
+                    <span className="text-xs">Toca cualquier producto a la izquierda para agregarlo.</span>
+                  </div>
+                ) : (
+                  cart.map((it, idx) => (
+                    <div
+                      key={it.uid}
+                      className="p-2 swing-outset-thin bg-[#FAFAFA] flex flex-col gap-1 border border-gray-300"
+                    >
+                      <div className="flex justify-between items-baseline">
+                        <div className="flex items-baseline gap-1.5 flex-1 min-w-0 pr-2">
+                          <span className="text-base font-black font-mono text-[#0A246A]">
+                            {it.cantidad}×
+                          </span>
+                          <span className="text-sm font-black text-black truncate">{it.nombre}</span>
+                        </div>
+
+                        <span className="text-base font-black font-mono text-black shrink-0">
+                          {fmt(it.precioFinal * it.cantidad)}
+                        </span>
+                      </div>
+
+                      {/* Modifiers (Tamaño, Masa) */}
+                      {(it.tamano || it.masa) && (
+                        <div className="text-[11px] text-gray-600 font-bold">
+                          {it.tamano ? `Tamaño: ${it.tamano}` : ''}
+                          {it.tamano && it.masa ? ' · ' : ''}
+                          {it.masa ? `Masa: ${it.masa}` : ''}
+                        </div>
+                      )}
+
+                      {/* Line notes / Comments for kitchen */}
+                      {it.notas && (
+                        <div className="text-xs font-bold text-[#B71C1C] bg-[#FFFDE7] p-1 border border-[#FBC02D]">
+                          Nota cocina: {it.notas}
+                        </div>
+                      )}
+
+                      {/* Action buttons (Edit note, Delete) */}
+                      <div className="flex justify-end gap-1 pt-1 border-t border-gray-200 mt-1">
+                        <Button
+                          size="sm"
+                          variant="default"
+                          onClick={() => {
+                            setEditingCartItemNote(idx)
+                            setItemNoteInput(it.notas || '')
+                          }}
+                          className="text-[11px] font-bold py-0.5 px-2 min-h-[32px]"
+                        >
+                          {it.notas ? 'EDITAR NOTA' : '+ NOTA'}
+                        </Button>
+
+                        <Button
+                          size="sm"
+                          variant="danger"
+                          onClick={() => handleRemoveCartItem(idx)}
+                          className="text-[11px] font-black py-0.5 px-2 min-h-[32px]"
+                          title="Eliminar producto de la orden"
+                        >
+                          ELIMINAR
+                        </Button>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+
+              {/* Totals Summary */}
+              <div className="pt-2 border-t-2 border-black bg-[#ECE9D8] swing-inset p-2.5 mt-2 shrink-0">
+                <div className="space-y-1 text-xs">
+                  <div className="flex justify-between text-gray-700">
+                    <span className="font-bold">Subtotal:</span>
+                    <span className="font-mono font-bold">{fmt(subtotal)}</span>
+                  </div>
+
+                  {descuentoPct > 0 && (
+                    <div className="flex justify-between text-red-700">
+                      <span className="font-bold">Descuento ({descuentoPct}%):</span>
+                      <span className="font-mono font-bold">-{fmt(descuento)}</span>
+                    </div>
+                  )}
+
+                  <div className="flex justify-between text-gray-700">
+                    <span className="font-bold">IVA (16% incluido):</span>
+                    <span className="font-mono font-bold">{fmt(impuesto)}</span>
+                  </div>
+
+                  <div className="pt-1.5 border-t border-gray-400 flex justify-between items-baseline">
+                    <span className="text-base font-black text-black">TOTAL A PAGAR:</span>
+                    <span className="text-2xl font-black font-mono text-[#0A246A]">{fmt(total)}</span>
+                  </div>
+                </div>
+
+                {/* Bottom Action Buttons */}
+                <div className="flex gap-2 mt-3">
+                  <Button
+                    size="md"
+                    variant="default"
+                    disabled={cart.length === 0}
+                    onClick={() => {
+                      if (confirm('¿Vaciar todos los productos del ticket actual?')) {
+                        setCart([])
+                        setDescuentoPct(0)
+                      }
+                    }}
+                    className="text-xs font-bold"
+                  >
+                    VACIAR
+                  </Button>
+
+                  <Button
+                    size="md"
+                    variant="default"
+                    onClick={() => {
+                      const pct = prompt('Introduce el porcentaje de descuento (0 - 100):', String(descuentoPct))
+                      if (pct !== null) {
+                        const n = Math.max(0, Math.min(100, parseFloat(pct) || 0))
+                        setDescuentoPct(n)
+                      }
+                    }}
+                    className="text-xs font-bold"
+                  >
+                    {descuentoPct > 0 ? `DESC: ${descuentoPct}%` : 'DESCUENTO'}
+                  </Button>
+
+                  <Button
+                    size="lg"
+                    variant="success"
+                    disabled={cart.length === 0}
+                    onClick={handleStartPay}
+                    className="flex-1 text-lg font-black tracking-wider py-3"
+                  >
+                    PAGAR CUENTA
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </Panel>
+        </div>
+      </div>
+
+      {/* ── Modals ── */}
+      {/* 1. Customizer Modal */}
+      {customizingProduct && (
         <CustomizerModal
-          item={customizing.item}
-          initialQty={customizing.initial?.qty}
-          initialSize={customizing.initial?.size}
-          initialDough={customizing.initial?.dough}
-          initialComments={customizing.initial?.comments}
-          onConfirm={confirmCustomize}
-          onClose={() => setCustomizing(null)}
+          item={customizingProduct.item}
+          isPizza={customizingProduct.isPizza}
+          config={cfg}
+          notasRapidas={catalogo.notasRapidas}
+          onConfirm={handleConfirmCustomizer}
+          onClose={() => setCustomizingProduct(null)}
         />
       )}
 
+      {/* 2. Modal for editing line note */}
+      {editingCartItemNote !== null && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 select-none">
+          <div className="w-full max-w-md swing-outset bg-[#D4D0C8] p-4 flex flex-col gap-3 border-2 border-black">
+            <span className="text-sm font-black text-[#0A246A] uppercase">
+              Editar Comentario de Cocina:
+            </span>
+            <input
+              type="text"
+              value={itemNoteInput}
+              onChange={e => setItemNoteInput(e.target.value)}
+              placeholder="Ej. Sin cebolla, extra salsa..."
+              className="w-full h-12 px-3 text-base font-bold bg-white swing-inset outline-none text-black"
+              autoFocus
+            />
+            <div className="flex justify-end gap-2">
+              <Button size="md" variant="default" onClick={() => setEditingCartItemNote(null)}>
+                CANCELAR
+              </Button>
+              <Button
+                size="md"
+                variant="success"
+                onClick={() => handleSaveItemNote(editingCartItemNote)}
+                className="font-black px-6"
+              >
+                GUARDAR NOTA
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 3. Order Type & Destination Modal */}
       {showOrderType && (
-        <OrderTypeModal 
-          clientsStore={clientsStore}
-          onConfirm={handleOrderTypeConfirm}
+        <OrderTypeModal
+          mesas={catalogo.mesas}
+          onConfirm={handleConfirmOrderType}
           onClose={() => setShowOrderType(false)}
         />
       )}
 
+      {/* 4. Cuentas en Espera Modal */}
       {showPending && (
-        <PendingAccountsModal 
-          ordersStore={ordersStore}
+        <PendingAccountsModal
+          ordenes={ordenes}
           onClose={() => setShowPending(false)}
-          onPayOrder={(id) => setPaying({ kind: 'order', id })}
+          onPayOrder={handlePayPendingOrder}
+          onCancelOrder={o => {
+            setShowPending(false)
+            setCancelTarget(o)
+          }}
         />
       )}
 
+      {/* 5. Exit Menu Modal */}
       {showExit && (
-        <ExitMenuModal 
+        <ExitMenuModal
+          usuario={usuario}
           onClose={() => setShowExit(false)}
           onLogout={onLogout}
+          onOpenConsultarNotas={() => setShowNotas(true)}
+          onOpenTurnos={() => setShowTurno(true)}
+          onGoCocina={onGoCocina}
+          onGoAdmin={onGoAdmin}
         />
       )}
 
-      {toast && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-gray-900 text-white px-6 py-3 rounded-full font-bold shadow-2xl z-50 text-sm animate-bounce">
-          {toast}
-        </div>
+      {/* 6. Turno Modal */}
+      {showTurno && <TurnoModal usuario={usuario} onClose={() => setShowTurno(false)} />}
+
+      {/* 7. Consultar Notas Modal */}
+      {showNotas && (
+        <ConsultarNotasModal
+          onClose={() => setShowNotas(false)}
+          onCancelOrder={o => setCancelTarget(o)}
+        />
+      )}
+
+      {/* 8. Cancel Order Dialog */}
+      {cancelTarget && (
+        <CancelDialog
+          order={cancelTarget}
+          needsSupervisor={!usuario.permisos.includes('cancelar')}
+          onConfirm={handleConfirmCancelOrder}
+          onClose={() => setCancelTarget(null)}
+        />
       )}
     </div>
   )

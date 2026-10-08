@@ -1,108 +1,173 @@
-export type Role = 'pos' | 'admin'
-export type Category = 'Todo' | 'pizzas' | 'snacks' | 'bebidas' | 'paquetes' | 'Clientes'
-export type PayMethod = 'efectivo' | 'tarjeta' | 'transferencia'
-export type OrderStatus = 'preparando' | 'listo' | 'en_reparto' | 'esperando' | 'entregado' | 'cancelado'
-export type OrderType = 'local' | 'llevar' | 'recoger' | 'domicilio'
-export type PizzaSize = 'Chica' | 'Mediana' | 'Grande'
-export type PizzaDough = 'Delgada' | 'Gruesa' | 'Orilla Rellena'
-export type Tone = 'yellow' | 'green' | 'purple' | 'orange' | 'ghost'
+// Tipos unificados del sistema POS clásico (Soft Restaurant)
 
-export interface Client {
-  phone: string
-  name: string
-  address: string
+export type Rol = 'admin' | 'cajero' | 'cocinero' | 'repartidor'
+
+export type Permiso =
+  | 'vender'
+  | 'cobrar'
+  | 'descuentos'
+  | 'cancelar'
+  | 'turnos'
+  | 'reportes'
+  | 'menu'
+  | 'usuarios'
+  | 'configuracion'
+  | 'cocina'
+  | 'entregas'
+
+export interface UsuarioActual {
+  id: number
+  nombre: string
+  usuario: string
+  rol: Rol
+  permisos: Permiso[]
 }
 
-export interface MenuItem {
-  id: string | number
-  name: string
-  basePrice: number
-  desc: string
-  category: Category
-  emoji: string
-  isPackage?: boolean
-  idPaquete?: number
-  itemsIncluidos?: any[]
+export type TipoOrden = 'local' | 'llevar' | 'recoger' | 'domicilio'
+export type EstadoOrden = 'abierta' | 'cerrada' | 'cancelada'
+export type MetodoPago = 'efectivo' | 'tarjeta' | 'transferencia' | 'mixto'
+export type PizzaTamano = 'Chica' | 'Mediana' | 'Grande'
+export type PizzaMasa = 'Delgada' | 'Gruesa' | 'Orilla Rellena'
+
+export interface Categoria {
+  id: number
+  nombre: string
+  color: string
+  orden: number
+  activo: boolean
 }
 
-export interface OrderItem {
-  uid: string
-  item: MenuItem
-  qty: number
-  size?: PizzaSize
-  dough?: PizzaDough
-  comments?: string
-  finalPrice: number
+export interface Producto {
+  id: number
+  nombre: string
+  descripcion: string | null
+  precio: number
+  idCategoria: number
+  orden: number
+  activo: boolean
 }
 
-export interface AppliedPayment {
-  method: PayMethod
-  amount: number
+export interface PaqueteItem {
+  idProducto: number
+  nombre: string
+  cantidad: number
+}
+
+export interface Paquete {
+  id: number
+  nombre: string
+  descripcion: string | null
+  precio: number
+  precioIndividual: number | null
+  orden: number
+  activo: boolean
+  items: PaqueteItem[]
+}
+
+export interface Mesa {
+  id: number
+  nombre: string
+  orden: number
+  activo: boolean
+}
+
+export interface NotaRapida {
+  id: number
+  texto: string
+  orden: number
+  activo: boolean
+}
+
+export interface Configuracion {
+  nombreNegocio: string
+  ivaTasa: number
+  ivaIncluido: boolean
+  extras: Record<string, number>
+  ticketPie: string
+  zona: string
+}
+
+export interface Catalogo {
+  categorias: Categoria[]
+  productos: Producto[]
+  paquetes: Paquete[]
+  mesas: Mesa[]
+  notasRapidas: NotaRapida[]
+  config: Configuracion
 }
 
 export interface Cliente {
-  id_cliente: number
+  id?: number
   celular: string
   nombre: string
   apellido?: string | null
-  direccion_principal?: string | null
+  direccion?: string | null
   referencias?: string | null
-  entre_calles?: string | null
-  codigo_postal?: string | null
   notas?: string | null
-  total_ordenes?: number
+  ordenes?: number
 }
 
-export interface Order {
-  id: string
-  numericId?: number
-  items: OrderItem[]
-  discount: number
+// Línea en el ticket / orden
+export interface DetalleOrden {
+  id?: number // id_detalle al guardar
+  uid: string // id local único en el carrito
+  idProducto?: number | null
+  idPaquete?: number | null
+  nombre: string
+  categoria?: string
+  cantidad: number
+  tamano?: PizzaTamano | null
+  masa?: PizzaMasa | null
+  notas?: string | null
+  precioUnitario: number
+  precioFinal: number
+}
+
+export interface PagoAplicado {
+  metodo: MetodoPago
+  monto: number
+  montoRecibido?: number | null
+  cambio?: number | null
+  propina?: number | null
+  fecha?: string
+}
+
+export interface Orden {
+  id: number
+  folio: string
+  tipo: TipoOrden
+  estado: EstadoOrden
+  mesa: string | null
+  comentarios: string | null
+  subtotal: number
+  descuentoPct: number
+  descuento: number
+  impuesto: number
   total: number
-  payMethod: PayMethod | null // Mantenemos null cuando no hay ningún pago aún
-  appliedPayments?: AppliedPayment[] // Array de pagos divididos
-  status: OrderStatus
-  time: string
-  cashier: string
-  orderType: OrderType
-  table?: string // Número de mesa para 'local' o 'llevar'
-  client?: Client // Cliente para 'domicilio' o 'recoger'
-  cancelReason?: string
-  refund?: number
-  idCliente?: number | null
-  clienteNombre?: string
-  clienteApellido?: string
-  clienteCelular?: string
-  clienteDireccion?: string
-  clienteReferencias?: string
-  clienteNotas?: string
-  fechaCreacion?: string
+  metodoPago: MetodoPago | null
+  pendientePago: boolean
+  fechaCreacion: string
+  fechaCierre: string | null
+  comandaImpresa: string | null
+  cajero: { id: number; nombre: string }
+  repartidor: { id: number; nombre: string } | null
+  cliente: Cliente | null
+  cancelacion: { motivo: string; categoria: string; reembolso: number } | null
+  items: DetalleOrden[]
+  pagos: PagoAplicado[]
 }
 
-export interface OrderAction {
-  icon: string
-  label: string
-  tone: Tone
-  to?: OrderStatus
-  charge?: boolean
-}
-
-export interface OrdersStore {
-  orders: Order[]
-  loading: boolean
-  error: string | null
-  refresh: () => Promise<void>
-  create: (
-    draft: Omit<Order, 'id'>,
-    paymentDetails?: { montoRecibido?: number; cambio?: number; propina?: number }
-  ) => Promise<string>
-  setStatus: (id: string, status: OrderStatus) => Promise<void>
-  updateOrder: (id: string, updates: Partial<Order>) => Promise<void>
-  collect: (
-    id: string,
-    payments: AppliedPayment[],
-    paymentDetails?: { montoRecibido?: number; cambio?: number; propina?: number }
-  ) => Promise<void>
-  cancel: (id: string, reason: string) => Promise<void>
-  clearClosed: () => void
+export interface ResumenTurno {
+  id: number
+  apertura: string
+  cierre: string | null
+  fondoInicial: number
+  ventasPorMetodo: { metodo: MetodoPago; total: number; pagos: number; propinas: number }[]
+  totalVentas: number
+  propinas: number
+  cancelaciones: { n: number; monto: number }
+  cuentasEnEspera: { n: number; monto: number }
+  efectivoEsperado: number
+  efectivoContado: number | null
+  notas: string | null
 }

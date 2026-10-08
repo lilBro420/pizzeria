@@ -1,163 +1,337 @@
-import { useState } from 'react'
-import { OrderType, Client } from '../../types'
-import { ORDER_TYPES } from '../../constants/orderRules'
-import { X, Search, User, MapPin, Hash } from 'lucide-react'
-import { ClientsStore } from '../../hooks/useClients'
+import React, { useState } from 'react'
+import { Cliente, Mesa, TipoOrden } from '../../types'
+import { api } from '../../services/api'
+import { Button } from '../ui/Button'
+import { Dialog } from '../ui/Dialog'
+import { NumPad } from '../ui/NumPad'
+import { VirtualKeyboard } from '../ui/VirtualKeyboard'
 
 interface OrderTypeModalProps {
-  clientsStore: ClientsStore
-  onConfirm: (type: OrderType, client?: Client, table?: string) => void
+  mesas: Mesa[]
+  initialType?: TipoOrden
+  initialTable?: string
+  initialClient?: Cliente | null
+  onConfirm: (data: {
+    tipo: TipoOrden
+    mesa: string | null
+    cliente: Cliente | null
+    payNow: boolean
+  }) => void
   onClose: () => void
 }
 
-export function OrderTypeModal({ clientsStore, onConfirm, onClose }: OrderTypeModalProps) {
-  const [type, setType] = useState<OrderType>('local')
-  
-  // Para 'local' y 'llevar'
-  const [table, setTable] = useState('')
-  
-  // Para 'domicilio' y 'recoger'
-  const [phone, setPhone] = useState('')
-  const [name, setName] = useState('')
-  const [address, setAddress] = useState('')
-  const [clientFound, setClientFound] = useState(false)
+export function OrderTypeModal({
+  mesas,
+  initialType = 'local',
+  initialTable = '',
+  initialClient = null,
+  onConfirm,
+  onClose,
+}: OrderTypeModalProps) {
+  const [tipo, setTipo] = useState<TipoOrden>(initialType)
+  const [mesa, setMesa] = useState(initialTable)
+  const [phone, setPhone] = useState(initialClient?.celular || '')
+  const [name, setName] = useState(initialClient?.nombre || '')
+  const [address, setAddress] = useState(initialClient?.direccion || '')
+  const [referencias, setReferencias] = useState(initialClient?.referencias || '')
+  const [searching, setSearching] = useState(false)
+  const [foundClient, setFoundClient] = useState<Cliente | null>(initialClient)
+  const [activeInput, setActiveInput] = useState<'mesa' | 'phone' | 'name' | 'address' | 'referencias'>('mesa')
+  const [keyboardMode, setKeyboardMode] = useState<'num' | 'alpha' | 'none'>('num')
 
-  const handlePhoneChange = (p: string) => {
-    setPhone(p)
-    if (p.length >= 10) {
-      const found = clientsStore.findByPhone(p)
-      if (found) {
-        setName(found.name)
-        setAddress(found.address)
-        setClientFound(true)
-      } else {
-        setClientFound(false)
+  const handlePhoneChange = async (val: string) => {
+    setPhone(val)
+    if (val.length >= 7) {
+      try {
+        setSearching(true)
+        const res = await api.getClientes(val)
+        const match = res.find(c => c.celular === val)
+        if (match) {
+          setName(match.nombre)
+          setAddress(match.direccion || '')
+          setReferencias(match.referencias || '')
+          setFoundClient(match)
+        } else {
+          setFoundClient(null)
+        }
+      } catch {
+        // Search error ignored
+      } finally {
+        setSearching(false)
       }
     } else {
-      setClientFound(false)
+      setFoundClient(null)
     }
   }
 
-  const handleConfirm = () => {
-    if (type === 'domicilio' || type === 'recoger') {
-      const client = { phone, name, address }
-      clientsStore.addOrUpdateClient(client)
-      onConfirm(type, client, undefined)
-    } else {
-      onConfirm(type, undefined, table)
-    }
-  }
+  const isLocalOrLlevar = tipo === 'local' || tipo === 'llevar'
+  const isRecoger = tipo === 'recoger'
+  const isDomicilio = tipo === 'domicilio'
 
-  const rule = ORDER_TYPES[type]
-  const isValid = 
-    (type === 'local' || type === 'llevar') ? true : // Mesa es opcional o requerida? Asumimos opcional o puedes requerirla
-    (type === 'recoger' ? phone.length >= 10 && name.length > 0 :
-    type === 'domicilio' ? phone.length >= 10 && name.length > 0 && address.length > 0 : false)
+  const isValid =
+    (tipo === 'local' ? mesa.trim().length > 0 : true) &&
+    (isRecoger ? phone.length >= 10 && name.trim().length > 0 : true) &&
+    (isDomicilio ? phone.length >= 10 && name.trim().length > 0 && address.trim().length > 0 : true)
+
+  const handleFinish = (payNow: boolean) => {
+    if (!isValid) return
+    const clientePayload: Cliente | null =
+      isRecoger || isDomicilio
+        ? {
+            celular: phone.trim(),
+            nombre: name.trim(),
+            direccion: address.trim() || null,
+            referencias: referencias.trim() || null,
+          }
+        : null
+
+    onConfirm({
+      tipo,
+      mesa: isLocalOrLlevar ? mesa.trim() || null : null,
+      cliente: clientePayload,
+      payNow,
+    })
+  }
 
   return (
-    <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-      <div className="bg-white w-full max-w-lg rounded-3xl overflow-hidden shadow-2xl flex flex-col max-h-[90vh]">
-        <div className="flex items-center justify-between p-5 border-b border-gray-100 shrink-0">
-          <h2 className="text-xl font-black text-gray-900 tracking-tight">Tipo de Orden</h2>
-          <button onClick={onClose} className="p-2 text-gray-400 hover:text-gray-700 bg-gray-50 hover:bg-gray-100 rounded-full transition-colors">
-            <X size={20} />
-          </button>
+    <Dialog title="TIPO DE ORDEN Y DESTINO" isOpen={true} onClose={onClose} maxWidth="max-w-2xl">
+      <div className="flex flex-col gap-4 select-none">
+        {/* Type selection buttons */}
+        <div className="grid grid-cols-4 gap-2">
+          {(
+            [
+              { t: 'local', label: 'COMER AQUÍ' },
+              { t: 'llevar', label: 'PARA LLEVAR' },
+              { t: 'recoger', label: 'RECOGER' },
+              { t: 'domicilio', label: 'DOMICILIO' },
+            ] as const
+          ).map(opt => (
+            <Button
+              key={opt.t}
+              size="lg"
+              variant={tipo === opt.t ? 'primary' : 'default'}
+              onClick={() => {
+                setTipo(opt.t)
+                if (opt.t === 'local' || opt.t === 'llevar') {
+                  setActiveInput('mesa')
+                  setKeyboardMode('num')
+                } else {
+                  setActiveInput('phone')
+                  setKeyboardMode('num')
+                }
+              }}
+              className="text-base font-black py-3"
+            >
+              {opt.label}
+            </Button>
+          ))}
         </div>
 
-        <div className="p-5 flex-1 overflow-y-auto">
-          <div className="grid grid-cols-4 gap-2 mb-6">
-            {(Object.keys(ORDER_TYPES) as OrderType[]).map(t => (
-              <button
-                key={t}
-                onClick={() => setType(t)}
-                className={`py-3 flex flex-col items-center gap-1.5 rounded-xl border transition-all ${
-                  type === t 
-                    ? 'border-red-500 bg-red-50 text-red-700 shadow-sm' 
-                    : 'border-gray-200 bg-white text-gray-500 hover:border-gray-300'
-                }`}
-              >
-                <span className="text-2xl">{ORDER_TYPES[t].icon}</span>
-                <span className="text-xs font-bold">{ORDER_TYPES[t].label}</span>
-              </button>
-            ))}
-          </div>
+        {/* Content depending on order type */}
+        {isLocalOrLlevar && (
+          <div className="flex flex-col gap-3 swing-inset bg-white p-3">
+            <div className="flex justify-between items-center">
+              <label className="text-sm font-bold text-gray-800 uppercase tracking-wide">
+                Número de Mesa o Referencia:
+              </label>
+              {tipo === 'local' && (
+                <span className="text-xs font-bold text-red-700 bg-red-100 px-2 py-0.5 border border-red-300">
+                  REQUERIDO
+                </span>
+              )}
+            </div>
 
-          <div className="p-4 bg-amber-50 text-amber-800 rounded-xl text-sm font-medium mb-6">
-            {rule.hint}
-          </div>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={mesa}
+                onFocus={() => {
+                  setActiveInput('mesa')
+                  setKeyboardMode('num')
+                }}
+                onChange={e => setMesa(e.target.value)}
+                placeholder="Ej. Mesa 4, Barra, Terraza..."
+                className="flex-1 h-12 px-3 text-xl font-bold bg-[#ECE9D8] swing-inset outline-none text-black"
+              />
+              <Button size="md" variant="default" onClick={() => setMesa('')}>
+                LIMPIAR
+              </Button>
+            </div>
 
-          <div className="space-y-4">
-            {(type === 'local' || type === 'llevar') ? (
+            {/* Quick table selector */}
+            <div>
+              <div className="text-xs font-bold text-gray-600 uppercase mb-1">
+                Selección Rápida de Mesas:
+              </div>
+              <div className="grid grid-cols-6 gap-2">
+                {mesas.map(m => (
+                  <Button
+                    key={m.id}
+                    size="sm"
+                    variant={mesa === m.nombre ? 'primary' : 'default'}
+                    onClick={() => setMesa(m.nombre)}
+                    className="font-black text-base py-2"
+                  >
+                    Mesa {m.nombre}
+                  </Button>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {(isRecoger || isDomicilio) && (
+          <div className="flex flex-col gap-3 swing-inset bg-white p-3">
+            <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="flex items-center gap-2 text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">
-                  <Hash size={14} /> Número de Mesa / Referencia
+                <label className="block text-xs font-bold text-gray-800 uppercase mb-1">
+                  Teléfono (10 dígitos):
                 </label>
-                <input 
+                <input
+                  type="tel"
+                  maxLength={10}
+                  value={phone}
+                  onFocus={() => {
+                    setActiveInput('phone')
+                    setKeyboardMode('num')
+                  }}
+                  onChange={e => handlePhoneChange(e.target.value)}
+                  placeholder="Ej. 5551234567"
+                  className="w-full h-11 px-3 text-lg font-mono font-bold bg-[#ECE9D8] swing-inset outline-none text-black"
+                />
+                {searching && <span className="text-xs text-blue-700 font-bold mt-1 block">Buscando...</span>}
+                {foundClient && (
+                  <span className="text-xs text-green-700 font-bold mt-1 block">
+                    ✓ Cliente registrado: {foundClient.nombre}
+                  </span>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-gray-800 uppercase mb-1">
+                  Nombre del Cliente:
+                </label>
+                <input
                   type="text"
-                  placeholder="Ej: Mesa 4, Barra, o nombre del cliente"
-                  value={table}
-                  onChange={e => setTable(e.target.value)}
-                  className="w-full border border-gray-300 rounded-xl px-4 py-3 text-sm focus:border-red-500 focus:ring-1 focus:ring-red-500 outline-none"
+                  value={name}
+                  onFocus={() => {
+                    setActiveInput('name')
+                    setKeyboardMode('alpha')
+                  }}
+                  onChange={e => setName(e.target.value)}
+                  placeholder="Nombre y apellido"
+                  className="w-full h-11 px-3 text-base font-bold bg-[#ECE9D8] swing-inset outline-none text-black"
                 />
               </div>
-            ) : (
-              <>
-                <div>
-                  <label className="flex items-center gap-2 text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">
-                    <Search size={14} /> Buscar por Teléfono
-                  </label>
-                  <input 
-                    type="tel"
-                    placeholder="10 dígitos"
-                    value={phone}
-                    onChange={e => handlePhoneChange(e.target.value)}
-                    className="w-full border border-gray-300 rounded-xl px-4 py-3 text-sm font-mono focus:border-red-500 focus:ring-1 focus:ring-red-500 outline-none"
-                  />
-                  {clientFound && <span className="text-xs text-green-600 font-medium mt-1 inline-block">✓ Cliente encontrado</span>}
-                </div>
+            </div>
 
+            {isDomicilio && (
+              <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="flex items-center gap-2 text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">
-                    <User size={14} /> Nombre del Cliente
+                  <label className="block text-xs font-bold text-gray-800 uppercase mb-1">
+                    Dirección de Entrega:
                   </label>
-                  <input 
+                  <input
                     type="text"
-                    value={name}
-                    onChange={e => setName(e.target.value)}
-                    className="w-full border border-gray-300 rounded-xl px-4 py-3 text-sm focus:border-red-500 focus:ring-1 focus:ring-red-500 outline-none"
+                    value={address}
+                    onFocus={() => {
+                      setActiveInput('address')
+                      setKeyboardMode('alpha')
+                    }}
+                    onChange={e => setAddress(e.target.value)}
+                    placeholder="Calle, número, colonia"
+                    className="w-full h-11 px-3 text-base font-bold bg-[#ECE9D8] swing-inset outline-none text-black"
                   />
                 </div>
 
-                {type === 'domicilio' && (
-                  <div>
-                    <label className="flex items-center gap-2 text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">
-                      <MapPin size={14} /> Dirección de Entrega
-                    </label>
-                    <textarea 
-                      value={address}
-                      onChange={e => setAddress(e.target.value)}
-                      rows={2}
-                      className="w-full border border-gray-300 rounded-xl px-4 py-3 text-sm focus:border-red-500 focus:ring-1 focus:ring-red-500 outline-none resize-none"
-                    />
-                  </div>
-                )}
-              </>
+                <div>
+                  <label className="block text-xs font-bold text-gray-800 uppercase mb-1">
+                    Referencias:
+                  </label>
+                  <input
+                    type="text"
+                    value={referencias}
+                    onFocus={() => {
+                      setActiveInput('referencias')
+                      setKeyboardMode('alpha')
+                    }}
+                    onChange={e => setReferencias(e.target.value)}
+                    placeholder="Entre calles, color de fachada"
+                    className="w-full h-11 px-3 text-base font-bold bg-[#ECE9D8] swing-inset outline-none text-black"
+                  />
+                </div>
+              </div>
             )}
           </div>
-        </div>
+        )}
 
-        <div className="p-5 border-t border-gray-100 shrink-0 bg-gray-50">
-          <button
-            onClick={handleConfirm}
-            disabled={!isValid}
-            className={`w-full py-4 rounded-xl font-black text-white text-base uppercase tracking-wide transition-all ${
-              isValid ? (rule.payUpfront ? 'bg-green-600 hover:bg-green-700 shadow-[0_4px_14px_rgba(22,163,74,0.3)]' : 'bg-red-600 hover:bg-red-700 shadow-[0_4px_14px_rgba(220,38,38,0.3)]') : 'bg-gray-300 cursor-not-allowed'
-            }`}
-          >
-            {rule.payUpfront ? 'Cobrar Ahora' : 'Enviar a Espera / Cocina'}
-          </button>
+        {/* On-screen keyboard if enabled */}
+        {keyboardMode === 'num' && (
+          <div className="pt-2 border-t border-[#808080]">
+            <NumPad
+              value={activeInput === 'mesa' ? mesa : phone}
+              onChange={val => {
+                if (activeInput === 'mesa') setMesa(val)
+                else handlePhoneChange(val)
+              }}
+              allowDecimal={false}
+            />
+          </div>
+        )}
+
+        {keyboardMode === 'alpha' && (
+          <div className="pt-2 border-t border-[#808080]">
+            <VirtualKeyboard
+              value={
+                activeInput === 'name'
+                  ? name
+                  : activeInput === 'address'
+                  ? address
+                  : activeInput === 'referencias'
+                  ? referencias
+                  : mesa
+              }
+              onChange={val => {
+                if (activeInput === 'name') setName(val)
+                else if (activeInput === 'address') setAddress(val)
+                else if (activeInput === 'referencias') setReferencias(val)
+                else setMesa(val)
+              }}
+            />
+          </div>
+        )}
+
+        {/* Action Buttons */}
+        <div className="flex items-center justify-between gap-3 pt-3 border-t border-[#808080]">
+          <Button size="lg" variant="default" onClick={onClose}>
+            CANCELAR
+          </Button>
+
+          <div className="flex gap-2">
+            <Button
+              size="lg"
+              variant="warning"
+              disabled={!isValid}
+              onClick={() => handleFinish(false)}
+              className="text-base font-black px-4"
+              title="Envía la comanda a cocina y deja la cuenta pendiente de cobro"
+            >
+              ENVIAR A ESPERA
+            </Button>
+
+            <Button
+              size="lg"
+              variant="success"
+              disabled={!isValid}
+              onClick={() => handleFinish(true)}
+              className="text-base font-black px-6"
+              title="Abre la pantalla de cobro para pagar ahora"
+            >
+              COBRAR AHORA
+            </Button>
+          </div>
         </div>
       </div>
-    </div>
+    </Dialog>
   )
 }

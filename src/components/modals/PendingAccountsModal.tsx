@@ -1,108 +1,161 @@
-import { OrdersStore } from '../../types'
-import { isClosed, ORDER_TYPES, STATUS } from '../../constants/orderRules'
-import { fmt } from '../../utils/formatters'
-import { X, Clock, Banknote } from 'lucide-react'
+import React, { useState } from 'react'
+import { Orden, TipoOrden } from '../../types'
+import { fmt, formatFecha } from '../../utils/formatters'
+import { Button } from '../ui/Button'
+import { Dialog } from '../ui/Dialog'
 
 interface PendingAccountsModalProps {
-  ordersStore: OrdersStore
+  ordenes: Orden[]
   onClose: () => void
-  onPayOrder: (orderId: string) => void
+  onPayOrder: (orden: Orden) => void
+  onCancelOrder?: (orden: Orden) => void
 }
 
-export function PendingAccountsModal({ ordersStore, onClose, onPayOrder }: PendingAccountsModalProps) {
-  const pendingOrders = ordersStore.orders.filter(o => !isClosed(o.status) && o.payMethod === null)
+export function PendingAccountsModal({
+  ordenes,
+  onClose,
+  onPayOrder,
+  onCancelOrder,
+}: PendingAccountsModalProps) {
+  const [filtroTipo, setFiltroTipo] = useState<string>('todos')
+
+  const pendientes = ordenes.filter(o => o.estado === 'abierta')
+  const filtradas = pendientes.filter(o => {
+    if (filtroTipo === 'todos') return true
+    return o.tipo === filtroTipo
+  })
 
   return (
-    <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 md:p-8">
-      <div className="bg-[#121212] w-full max-w-5xl h-full max-h-[90vh] rounded-3xl overflow-hidden shadow-2xl flex flex-col border border-gray-800">
-        <div className="flex items-center justify-between p-6 border-b border-gray-800 shrink-0 bg-[#1a1a1a]">
-          <div className="flex items-center gap-4">
-            <h2 className="text-2xl font-black text-white tracking-tight">Cuentas en Espera</h2>
-            <span className="bg-amber-500/20 text-amber-500 text-xs font-bold px-3 py-1 rounded-full border border-amber-500/30">
-              {pendingOrders.length} {pendingOrders.length === 1 ? 'cuenta' : 'cuentas'}
-            </span>
-          </div>
-          <button onClick={onClose} className="p-2 text-gray-400 hover:text-white bg-gray-800 hover:bg-gray-700 rounded-full transition-colors">
-            <X size={24} />
-          </button>
+    <Dialog title={`CUENTAS EN ESPERA (${pendientes.length} ACTIVAS)`} isOpen={true} onClose={onClose} maxWidth="max-w-5xl">
+      <div className="flex flex-col gap-3 h-[75vh] select-none">
+        {/* Filters bar */}
+        <div className="flex gap-2 shrink-0">
+          {[
+            { id: 'todos', label: `TODAS (${pendientes.length})` },
+            { id: 'local', label: 'COMER AQUÍ' },
+            { id: 'llevar', label: 'PARA LLEVAR' },
+            { id: 'recoger', label: 'RECOGER' },
+            { id: 'domicilio', label: 'DOMICILIO' },
+          ].map(f => (
+            <Button
+              key={f.id}
+              size="sm"
+              variant={filtroTipo === f.id ? 'primary' : 'default'}
+              onClick={() => setFiltroTipo(f.id)}
+              className="font-bold text-xs"
+            >
+              {f.label}
+            </Button>
+          ))}
         </div>
 
-        <div className="p-6 flex-1 overflow-y-auto" style={{ scrollbarWidth: 'thin', scrollbarColor: '#333 transparent' }}>
-          {pendingOrders.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-full text-gray-500 gap-4">
-              <Clock size={48} className="opacity-20" />
-              <p className="text-lg">No hay cuentas pendientes por cobrar.</p>
+        {/* Orders list */}
+        <div className="flex-1 overflow-y-auto swing-inset bg-[#ECE9D8] p-2">
+          {filtradas.length === 0 ? (
+            <div className="h-full flex flex-col items-center justify-center text-gray-500 font-bold text-lg">
+              No hay cuentas en espera en esta sección.
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {pendingOrders.map(order => {
-                const type = ORDER_TYPES[order.orderType]
-                const status = STATUS[order.status]
-                
-                return (
-                  <div key={order.id} className="bg-[#1a1a1a] border border-gray-800 rounded-2xl flex flex-col hover:border-gray-600 transition-colors">
-                    <div className="p-4 border-b border-gray-800 flex justify-between items-start">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+              {filtradas.map(orden => (
+                <div
+                  key={orden.id}
+                  className="swing-outset bg-white p-3 flex flex-col justify-between border-2 border-black"
+                >
+                  <div>
+                    {/* Header: Folio & Tipo */}
+                    <div className="flex justify-between items-start pb-2 border-b border-[#808080]">
                       <div>
-                        <div className="font-mono text-xl font-black text-white mb-1">{order.id}</div>
-                        <div className="flex items-center gap-2 text-xs">
-                          <span className="text-gray-400 bg-gray-800 px-2 py-0.5 rounded-md flex items-center gap-1">
-                            {type.icon} {type.label}
-                          </span>
-                          <span className="text-gray-500 flex items-center gap-1">
-                            <Clock size={12} /> {order.time}
-                          </span>
-                        </div>
+                        <span className="text-xl font-black font-mono text-[#0A246A] block">
+                          {orden.folio}
+                        </span>
+                        <span className="text-xs font-bold text-gray-600 uppercase">
+                          {orden.tipo === 'local'
+                            ? `MESA: ${orden.mesa || 'S/M'}`
+                            : orden.tipo === 'llevar'
+                            ? `LLEVAR ${orden.mesa ? `(${orden.mesa})` : ''}`
+                            : orden.tipo.toUpperCase()}
+                        </span>
                       </div>
-                      <div className={`text-[10px] font-bold px-2.5 py-1 rounded-full border ${status.badge} uppercase tracking-wider`}>
-                        {status.label}
-                      </div>
-                    </div>
-                    
-                    <div className="p-4 flex-1 text-sm text-gray-300">
-                      {order.client?.name && (
-                        <div className="mb-3 pb-3 border-b border-gray-800/50">
-                          <div className="font-bold text-white">{order.client.name}</div>
-                          {order.client.phone && <div className="text-gray-500 text-xs font-mono">{order.client.phone}</div>}
-                          {order.client.address && <div className="text-gray-500 text-xs mt-1">{order.client.address}</div>}
-                        </div>
-                      )}
-                      {order.table && (
-                        <div className="mb-3 pb-3 border-b border-gray-800/50">
-                          <span className="text-gray-500 text-xs uppercase">Mesa/Ref:</span> <span className="font-bold text-white">{order.table}</span>
-                        </div>
-                      )}
-                      
-                      <div className="space-y-1 mt-2">
-                        {order.items.slice(0, 3).map(i => (
-                          <div key={i.uid} className="flex justify-between">
-                            <span className="truncate pr-2">{i.qty}x {i.item.name}</span>
-                            <span className="font-mono text-gray-400 shrink-0">{fmt(i.finalPrice * i.qty)}</span>
-                          </div>
-                        ))}
-                        {order.items.length > 3 && (
-                          <div className="text-xs text-gray-500 italic mt-1">
-                            + {order.items.length - 3} producto(s) más...
-                          </div>
-                        )}
-                      </div>
+                      <span className="text-xs font-bold bg-[#FFF9C4] text-[#F57F17] px-2 py-0.5 border border-[#FBC02D]">
+                        EN ESPERA
+                      </span>
                     </div>
 
-                    <div className="p-4 bg-[#121212] rounded-b-2xl border-t border-gray-800 flex items-center justify-between">
-                      <div className="font-black text-xl text-yellow-500 font-mono">{fmt(order.total)}</div>
-                      <button 
-                        onClick={() => onPayOrder(order.id)}
-                        className="flex items-center gap-2 bg-green-600 hover:bg-green-500 text-white px-4 py-2 rounded-xl font-bold text-sm transition-colors"
-                      >
-                        <Banknote size={16} /> Cobrar
-                      </button>
+                    {/* Client info if delivery / pickup */}
+                    {orden.cliente && (
+                      <div className="py-1.5 text-xs border-b border-gray-200">
+                        <div className="font-extrabold text-black">{orden.cliente.nombre}</div>
+                        <div className="font-mono text-gray-600">{orden.cliente.celular}</div>
+                        {orden.cliente.direccion && (
+                          <div className="text-gray-700 truncate">{orden.cliente.direccion}</div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Items summary */}
+                    <div className="py-2 text-xs font-medium space-y-1 max-h-28 overflow-y-auto">
+                      {orden.items.map((it, idx) => (
+                        <div key={idx} className="flex justify-between items-center text-gray-800">
+                          <span className="truncate pr-1">
+                            {it.cantidad}× {it.nombre} {it.tamano ? `(${it.tamano})` : ''}
+                          </span>
+                          <span className="font-mono font-bold text-black shrink-0">
+                            {fmt(it.precioFinal * it.cantidad)}
+                          </span>
+                        </div>
+                      ))}
+                      {orden.comentarios && (
+                        <div className="text-[11px] font-bold text-blue-900 bg-blue-50 p-1 mt-1 border border-blue-200">
+                          Nota: {orden.comentarios}
+                        </div>
+                      )}
                     </div>
                   </div>
-                )
-              })}
+
+                  {/* Footer & Pay button */}
+                  <div className="pt-2 border-t border-[#808080] flex flex-col gap-2 mt-2">
+                    <div className="flex justify-between items-baseline">
+                      <span className="text-xs text-gray-600 font-bold">Total a Cobrar:</span>
+                      <span className="text-2xl font-black font-mono text-[#0A246A]">
+                        {fmt(orden.total)}
+                      </span>
+                    </div>
+
+                    <div className="flex gap-2">
+                      {onCancelOrder && (
+                        <Button
+                          size="md"
+                          variant="danger"
+                          onClick={() => onCancelOrder(orden)}
+                          className="text-xs font-bold px-2"
+                        >
+                          ANULAR
+                        </Button>
+                      )}
+                      <Button
+                        size="md"
+                        variant="success"
+                        onClick={() => onPayOrder(orden)}
+                        className="flex-1 text-base font-black tracking-wider"
+                      >
+                        PAGAR CUENTA
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              ))}
             </div>
           )}
         </div>
+
+        {/* Bottom actions */}
+        <div className="flex justify-end pt-2 border-t border-[#808080]">
+          <Button size="lg" variant="default" onClick={onClose} className="px-8 font-bold">
+            VOLVER AL POS
+          </Button>
+        </div>
       </div>
-    </div>
+    </Dialog>
   )
 }

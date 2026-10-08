@@ -1,93 +1,136 @@
-import { useState } from 'react'
-import { Order } from '../../types'
-import { ORDER_TYPES, PAY } from '../../constants/orderRules'
-import { CANCEL_REASONS } from '../../data/menu'
+import React, { useState } from 'react'
+import { Orden } from '../../types'
 import { fmt } from '../../utils/formatters'
+import { Button } from '../ui/Button'
+import { Dialog } from '../ui/Dialog'
 
 interface CancelDialogProps {
-  order: Order
-  onConfirm: (reason: string) => void
+  order: Orden
+  needsSupervisor?: boolean
+  onConfirm: (payload: { motivo: string; categoria: string; autoriza?: { usuario: string; password: string } | null }) => void
   onClose: () => void
 }
 
-export function CancelDialog({ order, onConfirm, onClose }: CancelDialogProps) {
-  const [reason, setReason] = useState(CANCEL_REASONS[0])
-  const type = ORDER_TYPES[order.orderType]
-  const paidWith = order.payMethod
-  const note =
-    order.status === 'en_reparto'
-      ? '🛵 La pizza ya salió: el repartidor debe regresarla al local.'
-      : order.status === 'preparando'
-      ? '🍳 Avisa a cocina para que detenga la preparación.'
-      : null
+const MOTIVOS: { label: string; cat: string }[] = [
+  { label: 'El cliente se arrepintió', cat: 'cliente_arrepintio' },
+  { label: 'Error al capturar la orden', cat: 'error_cajero' },
+  { label: 'Tiempo de espera prolongado', cat: 'tiempo_espera' },
+  { label: 'Producto dañado o defectuoso', cat: 'producto_danado' },
+  { label: 'Otro motivo justificado', cat: 'otro' },
+]
+
+export function CancelDialog({ order, needsSupervisor = false, onConfirm, onClose }: CancelDialogProps) {
+  const [selected, setSelected] = useState(MOTIVOS[0])
+  const [customMotivo, setCustomMotivo] = useState('')
+  const [supervisorUser, setSupervisorUser] = useState('carlos')
+  const [supervisorPass, setSupervisorPass] = useState('')
+
+  const handleConfirm = () => {
+    const finalMotivo = selected.cat === 'otro' && customMotivo.trim() ? customMotivo.trim() : selected.label
+    onConfirm({
+      motivo: finalMotivo,
+      categoria: selected.cat,
+      autoriza: needsSupervisor ? { usuario: supervisorUser.trim(), password: supervisorPass } : null,
+    })
+  }
+
+  const isCobrada = order.estado === 'cerrada'
 
   return (
-    <div className="fixed inset-0 z-40 flex items-center justify-center" onClick={onClose}>
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
-      <div
-        className="relative z-50 w-full max-w-sm mx-4 rounded-3xl overflow-hidden shadow-2xl"
-        style={{ background: '#1a1a2e', border: '1.5px solid #2d2d4a' }}
-        onClick={e => e.stopPropagation()}
-      >
-        <div className="px-6 pt-6 pb-4 border-b" style={{ borderColor: '#2d2d4a' }}>
-          <div className="text-3xl mb-1">🚫</div>
-          <h2 className="text-white font-black text-xl tracking-tight">Cancelar pedido {order.id}</h2>
-          <p className="text-gray-400 text-sm mt-0.5">
-            {type.icon} {type.label} · {fmt(order.total)}
-          </p>
-        </div>
-
-        <div className="px-6 py-5 space-y-4">
-          <div>
-            <div className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-2.5">Motivo</div>
-            <div className="flex flex-col gap-1.5">
-              {CANCEL_REASONS.map(r => (
-                <button
-                  key={r}
-                  onClick={() => setReason(r)}
-                  className={`text-left px-4 py-2.5 rounded-xl text-sm font-semibold transition-all cursor-pointer ${
-                    reason === r
-                      ? 'bg-[#C41E3A] text-white'
-                      : 'bg-white/8 text-gray-300 hover:bg-white/15 border border-white/10'
-                  }`}
-                >
-                  {r}
-                </button>
-              ))}
-            </div>
+    <Dialog title={`ANULAR ORDEN ${order.folio}`} isOpen={true} onClose={onClose} maxWidth="max-w-md">
+      <div className="flex flex-col gap-3 select-none">
+        <div className="swing-inset bg-white p-3">
+          <div className="flex justify-between items-baseline">
+            <span className="font-bold text-sm text-gray-700">Folio:</span>
+            <span className="font-mono text-xl font-black text-[#0A246A]">{order.folio}</span>
+          </div>
+          <div className="flex justify-between items-baseline mt-1">
+            <span className="font-bold text-sm text-gray-700">Monto de la Orden:</span>
+            <span className="font-mono text-xl font-black text-black">{fmt(order.total)}</span>
           </div>
 
-          {paidWith && (
-            <div
-              className="rounded-2xl px-4 py-3 text-sm"
-              style={{
-                background: 'rgba(245,197,24,0.1)',
-                border: '1px solid rgba(245,197,24,0.35)',
-                color: '#F5C518',
-              }}
-            >
-              💰 Ya estaba cobrada ({PAY[paidWith].label}). Devuelve <b className="font-mono">{fmt(order.total)}</b> al cliente.
+          {isCobrada && (
+            <div className="mt-2 p-2 bg-[#FFEBEE] border border-[#D32F2F] text-[#B71C1C] text-xs font-bold">
+              ATENCIÓN: La orden ya fue cobrada ({order.metodoPago?.toUpperCase()}). Se debe reembolsar{' '}
+              {fmt(order.total)} al cliente.
             </div>
           )}
-          {note && <div className="text-xs text-gray-400">{note}</div>}
         </div>
 
-        <div className="px-6 pb-6 grid grid-cols-2 gap-2">
-          <button
-            onClick={onClose}
-            className="py-3 rounded-2xl font-bold text-sm text-gray-300 bg-white/10 hover:bg-white/15 transition-colors cursor-pointer"
+        <div>
+          <span className="text-xs font-bold text-gray-700 uppercase tracking-wider mb-1 block">
+            Selecciona el motivo de cancelación:
+          </span>
+          <div className="flex flex-col gap-1.5 swing-inset bg-white p-2">
+            {MOTIVOS.map(m => (
+              <Button
+                key={m.cat}
+                size="sm"
+                variant={selected.cat === m.cat ? 'primary' : 'default'}
+                onClick={() => setSelected(m)}
+                className="justify-start text-xs font-bold py-2"
+              >
+                {selected.cat === m.cat ? '► ' : '  '} {m.label}
+              </Button>
+            ))}
+          </div>
+        </div>
+
+        {selected.cat === 'otro' && (
+          <div>
+            <label className="text-xs font-bold text-gray-700 uppercase mb-1 block">
+              Especifica el motivo:
+            </label>
+            <input
+              type="text"
+              value={customMotivo}
+              onChange={e => setCustomMotivo(e.target.value)}
+              placeholder="Escribe la razón..."
+              className="w-full h-10 px-2 text-sm bg-white swing-inset outline-none font-bold"
+            />
+          </div>
+        )}
+
+        {needsSupervisor && (
+          <div className="p-2.5 bg-[#FFFDE7] border border-[#FBC02D] swing-inset flex flex-col gap-2">
+            <span className="text-xs font-black text-[#F57F17] uppercase">
+              Se requiere autorización de supervisor:
+            </span>
+            <div className="grid grid-cols-2 gap-2">
+              <input
+                type="text"
+                value={supervisorUser}
+                onChange={e => setSupervisorUser(e.target.value)}
+                placeholder="Usuario supervisor"
+                className="h-10 px-2 text-xs bg-white swing-inset outline-none font-bold"
+              />
+              <input
+                type="password"
+                value={supervisorPass}
+                onChange={e => setSupervisorPass(e.target.value)}
+                placeholder="Contraseña"
+                className="h-10 px-2 text-xs bg-white swing-inset outline-none font-bold"
+              />
+            </div>
+          </div>
+        )}
+
+        <div className="flex justify-between items-center pt-2 border-t border-[#808080] mt-1">
+          <Button size="md" variant="default" onClick={onClose}>
+            VOLVER
+          </Button>
+
+          <Button
+            size="md"
+            variant="danger"
+            onClick={handleConfirm}
+            disabled={needsSupervisor && !supervisorPass}
+            className="font-black px-4"
           >
-            Volver
-          </button>
-          <button
-            onClick={() => onConfirm(reason)}
-            className="py-3 rounded-2xl font-black text-sm text-white uppercase tracking-wide cursor-pointer"
-            style={{ background: '#C41E3A', boxShadow: '0 6px 24px rgba(196,30,58,0.45)' }}
-          >
-            Cancelar pedido
-          </button>
+            CONFIRMAR ANULACIÓN
+          </Button>
         </div>
       </div>
-    </div>
+    </Dialog>
   )
 }
