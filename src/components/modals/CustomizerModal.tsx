@@ -3,6 +3,7 @@ import { Configuracion, NotaRapida, PizzaMasa, PizzaTamano, Producto } from '../
 import { fmt } from '../../utils/formatters'
 import { Button } from '../ui/Button'
 import { Dialog } from '../ui/Dialog'
+import { CheckIcon } from '../ui/Icons'
 import { VirtualKeyboard } from '../ui/VirtualKeyboard'
 
 interface CustomizerModalProps {
@@ -117,8 +118,8 @@ export function CustomizerModal({
                       }`}
                     >
                       {isSel && (
-                        <span className="absolute top-1.5 right-1.5 bg-white text-blue-700 text-[10px] font-black w-4 h-4 rounded-full flex items-center justify-center">
-                          ✓
+                        <span className="absolute top-1.5 right-1.5 bg-white text-blue-700 w-4 h-4 rounded-full flex items-center justify-center">
+                          <CheckIcon className="w-2.5 h-2.5 stroke-[3]" />
                         </span>
                       )}
                       <span className="text-base font-black tracking-tight">{s}</span>
@@ -157,8 +158,8 @@ export function CustomizerModal({
                       }`}
                     >
                       {isSel && (
-                        <span className="absolute top-1.5 right-1.5 bg-white text-indigo-700 text-[10px] font-black w-4 h-4 rounded-full flex items-center justify-center">
-                          ✓
+                        <span className="absolute top-1.5 right-1.5 bg-white text-indigo-700 w-4 h-4 rounded-full flex items-center justify-center">
+                          <CheckIcon className="w-2.5 h-2.5 stroke-[3]" />
                         </span>
                       )}
                       <span className="text-sm font-black text-center leading-tight">{d}</span>
@@ -190,13 +191,14 @@ export function CustomizerModal({
                   key={nr.id}
                   type="button"
                   onClick={() => handleToggleNotaRapida(nr.texto)}
-                  className={`px-3 py-2 text-xs font-bold rounded-lg select-none transition-all active:scale-95 ${
+                  className={`px-3 py-2 text-xs font-bold rounded-lg select-none transition-all active:scale-95 flex items-center gap-1.5 ${
                     active
                       ? 'bg-slate-900 text-white shadow-sm ring-2 ring-slate-700'
                       : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200'
                   }`}
                 >
-                  {active ? `✓ ${nr.texto}` : nr.texto}
+                  {active && <CheckIcon className="w-3.5 h-3.5 stroke-[3]" />}
+                  <span>{nr.texto}</span>
                 </button>
               )
             })}

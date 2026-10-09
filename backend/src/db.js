@@ -17,6 +17,10 @@ export const pool = new pg.Pool({
   statement_timeout: 15000,
 })
 
+pool.on('error', (err) => {
+  console.error('[pg.Pool] Error en cliente inactivo del pool (ignorado/manejado):', err.message)
+})
+
 /** Ejecuta fn(client) dentro de una transacción; hace ROLLBACK si falla. */
 export async function tx(fn) {
   const client = await pool.connect()

@@ -4,6 +4,7 @@ import { api } from '../../services/api'
 import { fmt, formatFecha } from '../../utils/formatters'
 import { Button } from '../ui/Button'
 import { Dialog } from '../ui/Dialog'
+import { PrinterIcon } from '../ui/Icons'
 
 interface ConsultarNotasModalProps {
   notasRapidas?: NotaRapida[]
@@ -210,9 +211,10 @@ export function ConsultarNotasModal({ onClose, onCancelOrder }: ConsultarNotasMo
                     size="md"
                     variant="default"
                     onClick={() => alert(`Reimprimiendo ticket ${selectedOrder.folio}...`)}
-                    className="flex-1 text-xs font-black"
+                    className="flex-1 text-xs font-black flex items-center justify-center gap-1.5"
                   >
-                    🖨️ REIMPRIMIR TICKET
+                    <PrinterIcon className="w-4 h-4" />
+                    <span>REIMPRIMIR TICKET</span>
                   </Button>
                   {selectedOrder.estado === 'abierta' && onCancelOrder && (
                     <Button

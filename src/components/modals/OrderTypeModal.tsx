@@ -3,6 +3,7 @@ import { Cliente, Mesa, TipoOrden } from '../../types'
 import { api } from '../../services/api'
 import { Button } from '../ui/Button'
 import { Dialog } from '../ui/Dialog'
+import { CheckIcon, ClockIcon, DeliveryIcon, TableIcon, TakeoutIcon } from '../ui/Icons'
 import { NumPad } from '../ui/NumPad'
 import { VirtualKeyboard } from '../ui/VirtualKeyboard'
 
@@ -103,13 +104,14 @@ export function OrderTypeModal({
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
           {(
             [
-              { t: 'local', label: 'COMER AQUÍ', sub: 'Mesa en restaurante' },
-              { t: 'llevar', label: 'PARA LLEVAR', sub: 'Mostrador directo' },
-              { t: 'recoger', label: 'RECOGER', sub: 'Pedido por teléfono' },
-              { t: 'domicilio', label: 'DOMICILIO', sub: 'Envío con repartidor' },
+              { t: 'local', label: 'COMER AQUÍ', sub: 'Mesa en restaurante', icon: TableIcon },
+              { t: 'llevar', label: 'PARA LLEVAR', sub: 'Mostrador directo', icon: TakeoutIcon },
+              { t: 'recoger', label: 'RECOGER', sub: 'Pedido por teléfono', icon: ClockIcon },
+              { t: 'domicilio', label: 'DOMICILIO', sub: 'Envío con repartidor', icon: DeliveryIcon },
             ] as const
           ).map(opt => {
             const isSel = tipo === opt.t
+            const IconComponent = opt.icon
             return (
               <button
                 key={opt.t}
@@ -130,6 +132,7 @@ export function OrderTypeModal({
                     : 'bg-white text-slate-800 border-slate-200 hover:border-slate-300 hover:bg-slate-50'
                 }`}
               >
+                <IconComponent className={`w-5 h-5 mb-1 ${isSel ? 'text-white' : 'text-slate-600'}`} />
                 <span className="text-sm sm:text-base font-black tracking-tight">{opt.label}</span>
                 <span
                   className={`text-[11px] mt-0.5 font-medium ${
@@ -223,8 +226,9 @@ export function OrderTypeModal({
                 />
                 {searching && <span className="text-xs text-blue-600 font-bold mt-1 block">Buscando cliente...</span>}
                 {foundClient && (
-                  <span className="text-xs text-emerald-600 font-bold mt-1 block">
-                    ✓ Cliente registrado: {foundClient.nombre}
+                  <span className="text-xs text-emerald-600 font-bold mt-1 flex items-center gap-1">
+                    <CheckIcon className="w-3.5 h-3.5 stroke-[3]" />
+                    <span>Cliente registrado: {foundClient.nombre}</span>
                   </span>
                 )}
               </div>

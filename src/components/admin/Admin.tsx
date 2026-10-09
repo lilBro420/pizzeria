@@ -154,7 +154,7 @@ export function Admin({ usuario, onLogout, onGoPOS, onGoCocina }: AdminProps) {
     e.preventDefault()
     try {
       await api.updateConfiguracion(configForm)
-      alert('✓ Configuración actualizada en el servidor.')
+      alert('Configuración actualizada en el servidor.')
       await reloadAll()
     } catch (err: any) {
       alert(`Error al guardar configuración: ${err.message}`)
@@ -955,7 +955,7 @@ export function Admin({ usuario, onLogout, onGoPOS, onGoCocina }: AdminProps) {
           onConfirm={async payload => {
             try {
               await api.cancelarOrden(cancelTarget.id, payload)
-              alert(`✓ Orden ${cancelTarget.folio} ha sido anulada.`)
+              alert(`Orden ${cancelTarget.folio} ha sido anulada.`)
               setCancelTarget(null)
               await reloadAll()
             } catch (err: any) {

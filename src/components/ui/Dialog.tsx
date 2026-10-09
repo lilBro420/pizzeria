@@ -1,4 +1,5 @@
 import React from 'react'
+import { CrossIcon } from './Icons'
 
 interface DialogProps {
   title: string
@@ -24,7 +25,7 @@ export function Dialog({ title, isOpen, onClose, maxWidth = 'max-w-2xl', childre
             className="w-8 h-8 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white font-black text-sm ml-2 flex items-center justify-center transition-colors"
             title="Cerrar"
           >
-            ✕
+            <CrossIcon className="w-4 h-4" />
           </button>
         </div>
         <div className="p-4 flex-1 overflow-y-auto flex flex-col min-h-0 bg-slate-50">{children}</div>
