@@ -54,9 +54,20 @@ async function start() {
     process.exit(1)
   }
   const PORT = process.env.PORT || 3001
-  app.listen(PORT, '0.0.0.0', () => {
+  const server = app.listen(PORT, '0.0.0.0', () => {
     console.log(`🚀 Backend corriendo en http://localhost:${PORT}`)
     console.log(`   Prueba: http://localhost:${PORT}/api/health`)
+  })
+
+  server.on('error', (err) => {
+    if (err.code === 'EADDRINUSE') {
+      console.warn(`\n⚠️  El puerto ${PORT} ya está en uso por otra instancia.`)
+      console.warn(`   El backend ya se encuentra activo en http://localhost:${PORT}`)
+      console.warn(`   (Si necesitas reiniciar, cierra la otra terminal o proceso en el puerto ${PORT})\n`)
+    } else {
+      console.error('❌ Error en el servidor:', err)
+      process.exit(1)
+    }
   })
 }
 start()
