@@ -227,132 +227,8 @@ export function PayScreen({
       {/* Main Grid: Diseñado especialmente para Tablets Verticales (md / portrait) y Escritorio (lg) */}
       <div className="flex-1 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-12 gap-2.5 min-h-0 overflow-y-auto lg:overflow-hidden">
         
-        {/* Panel 1: Resumen de Cuenta con Cambio del mismo diseño que Restante */}
-        <div className="lg:col-span-4 flex flex-col min-h-0">
-          <Panel title="RESUMEN DE CUENTA" className="h-full">
-            <div className="p-3 sm:p-4 flex flex-col h-full justify-between bg-white overflow-y-auto">
-              <div className="space-y-2">
-                <div className="flex justify-between items-baseline text-xs sm:text-sm text-slate-600">
-                  <span className="font-bold">Subtotal:</span>
-                  <span className="font-mono text-sm sm:text-base font-bold text-slate-800">{fmt(subtotal)}</span>
-                </div>
-
-                {descMonto > 0 && (
-                  <div className="flex justify-between items-baseline text-xs sm:text-sm text-rose-600 font-bold">
-                    <span>Descuento ({descuentoPct}%):</span>
-                    <span className="font-mono text-sm sm:text-base">-{fmt(descMonto)}</span>
-                  </div>
-                )}
-
-                <div className="flex justify-between items-baseline text-xs sm:text-sm text-slate-600">
-                  <span className="font-bold">IVA (16% incluido):</span>
-                  <span className="font-mono text-sm sm:text-base font-bold text-slate-800">{fmt(impuesto)}</span>
-                </div>
-
-                {/* Botón de Descuento con Icono SVG */}
-                <div className="pt-1">
-                  <button
-                    type="button"
-                    onClick={() => setShowDiscountModal(true)}
-                    className="w-full py-1.5 px-3 rounded-lg border border-slate-300 bg-slate-50 hover:bg-slate-100 text-slate-700 text-xs font-black flex items-center justify-between active:scale-98 transition-all"
-                  >
-                    <span className="flex items-center gap-1.5">
-                      <TagIcon className="w-3.5 h-3.5 text-slate-500" />
-                      <span>DESCUENTO:</span>
-                    </span>
-                    <span className="text-blue-700 font-black">
-                      {descuentoPct > 0 ? `${descuentoPct}% (Cambiar)` : '+ Aplicar descuento'}
-                    </span>
-                  </button>
-                </div>
-
-                <div className="pt-2 border-t-2 border-slate-900 flex justify-between items-baseline">
-                  <span className="font-black text-sm sm:text-base text-slate-900">TOTAL:</span>
-                  <span className="font-mono text-2xl sm:text-3xl font-black text-blue-700">{fmt(total)}</span>
-                </div>
-              </div>
-
-              {/* Pagos ya aplicados */}
-              <div className="mt-3 pt-2.5 border-t border-slate-200 flex-1 flex flex-col min-h-[90px]">
-                <span className="text-[11px] font-extrabold text-slate-500 uppercase tracking-wider mb-1 block">
-                  Pagos Registrados ({pagos.length}):
-                </span>
-                <div className="flex-1 overflow-y-auto space-y-1.5 p-1.5 bg-slate-50 rounded-xl border border-slate-200 max-h-36">
-                  {pagos.length === 0 ? (
-                    <div className="text-xs text-slate-400 italic p-2 text-center">
-                      Teclea el monto recibido y pulsa Aceptar.
-                    </div>
-                  ) : (
-                    pagos.map((p, idx) => (
-                      <div
-                        key={idx}
-                        className="bg-white p-2 rounded-lg border border-slate-200 flex items-center justify-between text-xs font-bold"
-                      >
-                        <div>
-                          <span className="uppercase text-blue-800 font-black block">
-                            {p.metodo === 'efectivo'
-                              ? 'Efectivo (MXN)'
-                              : p.metodo === 'dolares'
-                              ? 'Dólares (USD)'
-                              : p.metodo === 'tarjeta'
-                              ? 'Tarjeta'
-                              : 'Transferencia'}
-                          </span>
-                          {p.montoRecibido && p.montoRecibido > p.monto && (
-                            <span className="text-[11px] text-slate-500 block font-normal">
-                              Recibió: {fmt(p.montoRecibido)}
-                            </span>
-                          )}
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <span className="font-mono text-sm text-slate-900 font-black">{fmt(p.monto)}</span>
-                          <button
-                            type="button"
-                            onClick={() => handleRemovePayment(idx)}
-                            className="w-5 h-5 rounded bg-rose-50 text-rose-600 hover:bg-rose-100 font-black text-xs flex items-center justify-center transition-colors"
-                            title="Quitar pago"
-                          >
-                            <CrossIcon className="w-3 h-3 stroke-[3]" />
-                          </button>
-                        </div>
-                      </div>
-                    ))
-                  )}
-                </div>
-              </div>
-
-              {/* Estado de Cobro: Restante y Cambio CON EL MISMO DISEÑO EXACTO */}
-              <div className="mt-3 pt-2.5 border-t border-slate-200 flex flex-col gap-1.5">
-                {/* Restante por cobrar */}
-                <div className="flex justify-between items-baseline">
-                  <span className="text-xs font-bold text-slate-500 uppercase">Restante por Cobrar:</span>
-                  <span
-                    className={`font-mono text-2xl font-black ${
-                      restanteCents === 0 ? 'text-emerald-600' : 'text-rose-600'
-                    }`}
-                  >
-                    {fmt(restante)}
-                  </span>
-                </div>
-
-                {/* Cambio a devolver (MISMO DISEÑO que Restante por cobrar, sin recuadros estridentes) */}
-                <div className="flex justify-between items-baseline pt-1 border-t border-slate-100">
-                  <span className="text-xs font-bold text-slate-500 uppercase">Cambio a Devolver:</span>
-                  <span
-                    className={`font-mono text-2xl font-black ${
-                      cambioMostrar > 0 ? 'text-emerald-600' : 'text-slate-400'
-                    }`}
-                  >
-                    {fmt(cambioMostrar)}
-                  </span>
-                </div>
-              </div>
-            </div>
-          </Panel>
-        </div>
-
-        {/* Panel 2: Métodos de Pago con iconos SVG */}
-        <div className="lg:col-span-4 flex flex-col min-h-0">
+        {/* Panel 1 (Izquierda): Métodos de Pago con iconos SVG */}
+        <div className="lg:col-span-4 flex flex-col min-h-0 order-1">
           <Panel title="MÉTODO DE PAGO" className="h-full">
             <div className="p-3 sm:p-4 flex flex-col h-full gap-2.5 bg-slate-50 overflow-y-auto">
               {/* Method tabs: EFECTIVO, DOLARES, TARJETA, TRANSFERENCIA */}
@@ -489,8 +365,8 @@ export function PayScreen({
           </Panel>
         </div>
 
-        {/* Panel 3: Teclado Numérico con botón ACEPTAR MONTO y PAGAR CUENTA */}
-        <div className="md:col-span-2 lg:col-span-4 flex flex-col min-h-0">
+        {/* Panel 2 (Centro): Teclado Numérico con botón ACEPTAR MONTO y PAGAR CUENTA */}
+        <div className="md:col-span-2 lg:col-span-4 flex flex-col min-h-0 order-2 md:order-3 lg:order-2">
           <Panel title="IMPORTE RECIBIDO" className="h-full">
             <div className="p-3 sm:p-4 flex flex-col h-full justify-between bg-white overflow-y-auto">
               {/* Display de monto recibido */}
@@ -538,6 +414,130 @@ export function PayScreen({
                   <CheckIcon className="w-5 h-5" />
                   <span>PAGAR CUENTA</span>
                 </button>
+              </div>
+            </div>
+          </Panel>
+        </div>
+
+        {/* Panel 3 (Derecha): Resumen de Cuenta con Cambio del mismo diseño que Restante */}
+        <div className="lg:col-span-4 flex flex-col min-h-0 order-3 md:order-2 lg:order-3">
+          <Panel title="RESUMEN DE CUENTA" className="h-full">
+            <div className="p-3 sm:p-4 flex flex-col h-full justify-between bg-white overflow-y-auto">
+              <div className="space-y-2">
+                <div className="flex justify-between items-baseline text-xs sm:text-sm text-slate-600">
+                  <span className="font-bold">Subtotal:</span>
+                  <span className="font-mono text-sm sm:text-base font-bold text-slate-800">{fmt(subtotal)}</span>
+                </div>
+
+                {descMonto > 0 && (
+                  <div className="flex justify-between items-baseline text-xs sm:text-sm text-rose-600 font-bold">
+                    <span>Descuento ({descuentoPct}%):</span>
+                    <span className="font-mono text-sm sm:text-base">-{fmt(descMonto)}</span>
+                  </div>
+                )}
+
+                <div className="flex justify-between items-baseline text-xs sm:text-sm text-slate-600">
+                  <span className="font-bold">IVA (16% incluido):</span>
+                  <span className="font-mono text-sm sm:text-base font-bold text-slate-800">{fmt(impuesto)}</span>
+                </div>
+
+                {/* Botón de Descuento con Icono SVG */}
+                <div className="pt-1">
+                  <button
+                    type="button"
+                    onClick={() => setShowDiscountModal(true)}
+                    className="w-full py-1.5 px-3 rounded-lg border border-slate-300 bg-slate-50 hover:bg-slate-100 text-slate-700 text-xs font-black flex items-center justify-between active:scale-98 transition-all"
+                  >
+                    <span className="flex items-center gap-1.5">
+                      <TagIcon className="w-3.5 h-3.5 text-slate-500" />
+                      <span>DESCUENTO:</span>
+                    </span>
+                    <span className="text-blue-700 font-black">
+                      {descuentoPct > 0 ? `${descuentoPct}% (Cambiar)` : '+ Aplicar descuento'}
+                    </span>
+                  </button>
+                </div>
+
+                <div className="pt-2 border-t-2 border-slate-900 flex justify-between items-baseline">
+                  <span className="font-black text-sm sm:text-base text-slate-900">TOTAL:</span>
+                  <span className="font-mono text-2xl sm:text-3xl font-black text-blue-700">{fmt(total)}</span>
+                </div>
+              </div>
+
+              {/* Pagos ya aplicados */}
+              <div className="mt-3 pt-2.5 border-t border-slate-200 flex-1 flex flex-col min-h-[90px]">
+                <span className="text-[11px] font-extrabold text-slate-500 uppercase tracking-wider mb-1 block">
+                  Pagos Registrados ({pagos.length}):
+                </span>
+                <div className="flex-1 overflow-y-auto space-y-1.5 p-1.5 bg-slate-50 rounded-xl border border-slate-200 max-h-36">
+                  {pagos.length === 0 ? (
+                    <div className="text-xs text-slate-400 italic p-2 text-center">
+                      Teclea el monto recibido y pulsa Aceptar.
+                    </div>
+                  ) : (
+                    pagos.map((p, idx) => (
+                      <div
+                        key={idx}
+                        className="bg-white p-2 rounded-lg border border-slate-200 flex items-center justify-between text-xs font-bold"
+                      >
+                        <div>
+                          <span className="uppercase text-blue-800 font-black block">
+                            {p.metodo === 'efectivo'
+                              ? 'Efectivo (MXN)'
+                              : p.metodo === 'dolares'
+                              ? 'Dólares (USD)'
+                              : p.metodo === 'tarjeta'
+                              ? 'Tarjeta'
+                              : 'Transferencia'}
+                          </span>
+                          {p.montoRecibido && p.montoRecibido > p.monto && (
+                            <span className="text-[11px] text-slate-500 block font-normal">
+                              Recibió: {fmt(p.montoRecibido)}
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono text-sm text-slate-900 font-black">{fmt(p.monto)}</span>
+                          <button
+                            type="button"
+                            onClick={() => handleRemovePayment(idx)}
+                            className="w-5 h-5 rounded bg-rose-50 text-rose-600 hover:bg-rose-100 font-black text-xs flex items-center justify-center transition-colors"
+                            title="Quitar pago"
+                          >
+                            <CrossIcon className="w-3 h-3 stroke-[3]" />
+                          </button>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+
+              {/* Estado de Cobro: Restante y Cambio CON EL MISMO DISEÑO EXACTO */}
+              <div className="mt-3 pt-2.5 border-t border-slate-200 flex flex-col gap-1.5">
+                {/* Restante por cobrar */}
+                <div className="flex justify-between items-baseline">
+                  <span className="text-xs font-bold text-slate-500 uppercase">Restante por Cobrar:</span>
+                  <span
+                    className={`font-mono text-2xl font-black ${
+                      restanteCents === 0 ? 'text-emerald-600' : 'text-rose-600'
+                    }`}
+                  >
+                    {fmt(restante)}
+                  </span>
+                </div>
+
+                {/* Cambio a devolver (MISMO DISEÑO que Restante por cobrar, sin recuadros estridentes) */}
+                <div className="flex justify-between items-baseline pt-1 border-t border-slate-100">
+                  <span className="text-xs font-bold text-slate-500 uppercase">Cambio a Devolver:</span>
+                  <span
+                    className={`font-mono text-2xl font-black ${
+                      cambioMostrar > 0 ? 'text-emerald-600' : 'text-slate-400'
+                    }`}
+                  >
+                    {fmt(cambioMostrar)}
+                  </span>
+                </div>
               </div>
             </div>
           </Panel>

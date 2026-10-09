@@ -436,10 +436,17 @@ export function POS({ usuario, onLogout, onGoCocina, onGoAdmin }: POSProps) {
             </span>
 
             {turnoActual ? (
-              <span className="bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-2.5 py-1 rounded-lg font-bold flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => setShowTurno(true)}
+                className="bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-2.5 py-1 rounded-lg font-bold flex items-center gap-1.5 hover:bg-emerald-500/30 transition-all cursor-pointer"
+                title="Haz clic para ver o cerrar el turno activo"
+              >
                 <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                Turno Abierto
-              </span>
+                <span>
+                  Turno #{turnoActual.id} Abierto {turnoActual.empleadoNombre ? `(${turnoActual.empleadoNombre})` : ''}
+                </span>
+              </button>
             ) : (
               <button
                 type="button"

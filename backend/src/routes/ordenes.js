@@ -222,9 +222,9 @@ ordenesRouter.post(
       if (!hasPerm(user, 'cobrar')) {
         throw new HttpError(403, 'No tienes permiso para cobrar')
       }
-      const tOpen = await pool.query('SELECT 1 FROM public.turnos WHERE id_empleado = $1 AND cierre IS NULL', [user.id])
+      const tOpen = await pool.query('SELECT id_turno FROM public.turnos WHERE cierre IS NULL ORDER BY apertura DESC LIMIT 1')
       if (!tOpen.rowCount) {
-        throw new HttpError(400, 'No tienes un turno de caja abierto. Abre tu turno antes de cobrar.')
+        throw new HttpError(400, 'No hay un turno de caja abierto en el sistema. Abre un turno antes de cobrar.')
       }
     }
 
@@ -264,7 +264,7 @@ ordenesRouter.post(
       }
 
       const folio = `#${(await c.query(`SELECT nextval('public.folio_seq') AS n`)).rows[0].n}`
-      const turno = await c.query('SELECT id_turno FROM public.turnos WHERE id_empleado = $1 AND cierre IS NULL', [user.id])
+      const turno = await c.query('SELECT id_turno FROM public.turnos WHERE cierre IS NULL ORDER BY apertura DESC LIMIT 1')
       const pagada = Boolean(pagos)
 
       const o = await c.query(
@@ -341,9 +341,9 @@ ordenesRouter.post(
     const b = z.object({ pagos: z.array(pagoSchema).min(1).max(6), propina: z.number().min(0).max(100000).default(0) }).parse(req.body)
 
     await tx(async c => {
-      const tOpen = await c.query('SELECT 1 FROM public.turnos WHERE id_empleado = $1 AND cierre IS NULL', [req.user.id])
+      const tOpen = await c.query('SELECT id_turno FROM public.turnos WHERE cierre IS NULL ORDER BY apertura DESC LIMIT 1')
       if (!tOpen.rowCount) {
-        throw new HttpError(400, 'No tienes un turno de caja abierto. Abre tu turno antes de cobrar.')
+        throw new HttpError(400, 'No hay un turno de caja abierto en el sistema. Abre un turno antes de cobrar.')
       }
 
       const r = await c.query('SELECT id_orden, folio, estado_actual, total FROM public.ordenes WHERE id_orden = $1 FOR UPDATE', [idOrden])

@@ -143,10 +143,16 @@ export function TurnoModal({ usuario, onClose, onShiftClosed }: TurnoModalProps)
         ) : mode === 'view' ? (
           /* Active shift dashboard */
           <div className="flex flex-col gap-3">
-            <div className="bg-white rounded-xl border border-slate-200 p-4 grid grid-cols-3 gap-2 text-xs shadow-sm">
+            <div className="bg-white rounded-xl border border-slate-200 p-4 grid grid-cols-2 sm:grid-cols-4 gap-2.5 text-xs shadow-sm">
               <div>
                 <span className="text-slate-400 font-semibold block">Turno ID:</span>
                 <span className="font-mono font-black text-sm text-slate-900">#{turno.id}</span>
+              </div>
+              <div>
+                <span className="text-slate-400 font-semibold block">Responsable:</span>
+                <span className="font-bold text-slate-900 truncate block">
+                  {turno.empleadoNombre || usuario.nombre}
+                </span>
               </div>
               <div>
                 <span className="text-slate-400 font-semibold block">Apertura:</span>

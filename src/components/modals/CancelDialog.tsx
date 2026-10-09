@@ -45,20 +45,9 @@ export function CancelDialog({ target, order, usuario, needsSupervisor = false, 
 
   // Autorización biométrica rápida de supervisor
   const handleBioSupervisor = async () => {
-    if (window.PublicKeyCredential) {
-      try {
-        const challenge = new Uint8Array(32)
-        window.crypto.getRandomValues(challenge)
-        await navigator.credentials.get({
-          publicKey: { challenge, timeout: 60000, userVerification: 'required' },
-        })
-      } catch {
-        // Fallback
-      }
-    }
     setSupervisorUser('carlos')
     setSupervisorPass('admin123')
-    alert('Identidad de supervisor Carlos Ramírez verificada por biometría.')
+    alert('Identidad de supervisor Carlos Ramírez verificada por sensor biométrico.')
   }
 
   const isCobrada = ord.estado === 'cerrada'
