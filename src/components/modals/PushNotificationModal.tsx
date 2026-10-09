@@ -18,45 +18,55 @@ export function PushNotificationModal({ onClose }: PushNotificationModalProps) {
     setPermission(notifications.getPermission())
   }, [])
 
+  const isIOS = notifications.isIOSDevice()
+
   const handleRequestPermission = async () => {
+    notifications.unlockAudio()
     const res = await notifications.requestPermission()
     setPermission(res)
     if (res === 'granted') {
-      setTestStatus('¡Permisos concedidos! Ahora puedes enviar notificaciones de prueba.')
+      setTestStatus(
+        isIOS
+          ? 'Alertas activadas para iPhone. Puedes probar las alertas flotantes y sonidos abajo.'
+          : 'Permisos concedidos. Ahora puedes enviar notificaciones de prueba.'
+      )
     } else if (res === 'denied') {
       setTestStatus('Permisos bloqueados en el navegador. Debes habilitarlos en la barra de direcciones.')
     }
   }
 
   const handleTestNotification = async () => {
+    notifications.unlockAudio()
     setTestStatus('Enviando notificación push...')
-    const ok = await notifications.sendNotification('🍕 Pizzería Volcán POS', {
-      body: '¡Notificación Push de prueba recibida con éxito! Sistema operativo conectado.',
+    const ok = await notifications.sendNotification('Pizzería Volcán POS', {
+      body: 'Notificación Push de prueba recibida con éxito. Sistema POS conectado.',
       tag: 'test',
     })
 
     if (ok) {
-      setTestStatus('¡Notificación enviada con éxito! Revisa la barra de notificaciones de tu dispositivo.')
+      setTestStatus('Notificación enviada con éxito. Revisa el banner superior en tu pantalla.')
     } else {
-      setTestStatus('No se pudo enviar la notificación. Verifica que los permisos estén concedidos.')
+      setTestStatus('No se pudo enviar la notificación. Verifica los permisos.')
     }
   }
 
   const handleTestKitchen = async () => {
+    notifications.unlockAudio()
     setTestStatus('Enviando alerta de cocina...')
     await notifications.notifyNewKitchenOrder('#4099', 3, '1x Pepperoni Grande, 2x Coca-Cola')
-    setTestStatus('Alerta de comanda enviada con campanazo y vibración.')
+    setTestStatus('Alerta de comanda enviada con campanazo y banner superior.')
   }
 
   const handleTestReady = async () => {
+    notifications.unlockAudio()
     setTestStatus('Enviando alerta de pedido listo...')
     await notifications.notifyOrderReady('#4099', 'domicilio', 'Roberto Mendoza')
-    setTestStatus('Alerta de entrega enviada.')
+    setTestStatus('Alerta de pedido listo enviada con sonido y banner.')
   }
 
   return (
     <Dialog title="NOTIFICACIONES PUSH & ALERTAS EN TIEMPO REAL" isOpen={true} onClose={onClose} maxWidth="max-w-xl">
-      <div className="flex flex-col gap-4 select-none text-slate-800">
+      <div className="flex flex-col gap-3.5 text-slate-800">
         {/* Estado actual */}
         <div className="p-3.5 rounded-2xl border bg-slate-50 flex items-center justify-between">
           <div>
@@ -73,12 +83,14 @@ export function PushNotificationModal({ onClose }: PushNotificationModalProps) {
                     : 'bg-amber-500'
                 }`}
               />
-              <span className="text-sm font-black uppercase">
+              <span className="text-xs sm:text-sm font-black uppercase">
                 {permission === 'granted'
-                  ? 'ACTIVAS Y PERMITIDAS'
+                  ? isIOS
+                    ? 'ACTIVAS (BANNER Y SONIDO EN IPHONE)'
+                    : 'ACTIVAS Y PERMITIDAS'
                   : permission === 'denied'
                   ? 'BLOQUEADAS EN EL NAVEGADOR'
-                  : 'PENDIENTES DE AUTORIZACIÓN'}
+                  : 'PENDIENTES DE ACTIVACIÓN'}
               </span>
             </div>
           </div>
@@ -90,7 +102,7 @@ export function PushNotificationModal({ onClose }: PushNotificationModalProps) {
               onClick={handleRequestPermission}
               className="text-xs font-black py-2 px-3 shadow-sm"
             >
-              ACTIVAR PERMISOS
+              ACTIVAR ALERTAS
             </Button>
           )}
         </div>
@@ -103,7 +115,7 @@ export function PushNotificationModal({ onClose }: PushNotificationModalProps) {
           </div>
         )}
 
-        {/* Botones de Prueba */}
+        {/* Botones de Prueba Rápidas (Sin emojis) */}
         <div>
           <span className="text-xs font-extrabold text-slate-700 uppercase tracking-wider block mb-2">
             Pruebas Rápidas de Notificaciones:
@@ -115,7 +127,7 @@ export function PushNotificationModal({ onClose }: PushNotificationModalProps) {
               className="p-3 rounded-xl bg-white hover:bg-slate-50 border border-slate-300 shadow-2xs text-left active:scale-95 transition-all flex flex-col justify-between min-h-[78px]"
             >
               <span className="text-xs font-black text-slate-900 block leading-tight">
-                🔔 Prueba General
+                Prueba General
               </span>
               <span className="text-[11px] text-slate-500 font-medium mt-1">
                 Envía notificación del sistema al dispositivo
@@ -128,10 +140,10 @@ export function PushNotificationModal({ onClose }: PushNotificationModalProps) {
               className="p-3 rounded-xl bg-amber-50 hover:bg-amber-100 border border-amber-300 shadow-2xs text-left active:scale-95 transition-all flex flex-col justify-between min-h-[78px]"
             >
               <span className="text-xs font-black text-amber-900 block leading-tight">
-                🍕 Alerta Cocina
+                Alerta Cocina
               </span>
               <span className="text-[11px] text-amber-700 font-medium mt-1">
-                Campana y aviso de nueva comanda entrante
+                Sonido y aviso de nueva comanda entrante
               </span>
             </button>
 
@@ -141,7 +153,7 @@ export function PushNotificationModal({ onClose }: PushNotificationModalProps) {
               className="p-3 rounded-xl bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 shadow-2xs text-left active:scale-95 transition-all flex flex-col justify-between min-h-[78px]"
             >
               <span className="text-xs font-black text-emerald-900 block leading-tight">
-                🛵 Pedido Listo
+                Pedido Listo
               </span>
               <span className="text-[11px] text-emerald-700 font-medium mt-1">
                 Aviso a repartidor o mesero para entrega
@@ -150,23 +162,23 @@ export function PushNotificationModal({ onClose }: PushNotificationModalProps) {
           </div>
         </div>
 
-        {/* Guía paso a paso para dispositivos móviles y escritorio */}
+        {/* Guía para dispositivos móviles y escritorio */}
         <div className="bg-slate-100 p-3.5 rounded-2xl border border-slate-200 text-xs space-y-2">
           <span className="font-extrabold text-slate-900 uppercase tracking-wider block">
-            ¿Cómo probarlas en tu Teléfono Móvil o Tableta?
+            Funcionamiento en Teléfonos Móviles y Tabletas:
           </span>
           <ol className="list-decimal list-inside space-y-1 text-slate-600 font-medium">
             <li>
-              <strong>Paso 1:</strong> Pulsa el botón <strong>ACTIVAR PERMISOS</strong> arriba y selecciona <em>&quot;Permitir&quot;</em> cuando el navegador lo solicite.
+              <strong>Paso 1:</strong> Pulsa el botón <strong>ACTIVAR PERMISOS</strong> y selecciona <em>&quot;Permitir&quot;</em> si el navegador lo solicita.
             </li>
             <li>
-              <strong>Paso 2:</strong> Pulsa <strong>🔔 Prueba General</strong>. La notificación aparecerá en la barra superior de tu celular y emitirá un sonido de campana con vibración.
+              <strong>Paso 2:</strong> Pulsa <strong>Prueba General</strong>. Verás aparecer el banner superior en tu pantalla acompañado de vibración y sonido.
             </li>
             <li>
-              <strong>En iPhone / iPad (iOS):</strong> Para recibir notificaciones push en iOS, pulsa el botón Compartir de Safari y selecciona <em>&quot;Añadir a la pantalla de inicio&quot;</em>. Al abrir la app desde el inicio, podrás autorizar las notificaciones nativas.
+              <strong>En iPhone (iOS Safari):</strong> Apple restringe las notificaciones nativas en pestañas estándar de Safari; el sistema despliega automáticamente banners flotantes con sonido y vibración. Para recibirlas en la pantalla de bloqueo de iOS, pulsa Compartir en Safari y selecciona <em>&quot;Añadir a pantalla de inicio&quot;</em>.
             </li>
             <li>
-              <strong>En Android:</strong> Funcionan directamente en Google Chrome al conceder permisos.
+              <strong>En Android:</strong> Funcionan directamente en Google Chrome al pulsar activar permisos.
             </li>
           </ol>
         </div>

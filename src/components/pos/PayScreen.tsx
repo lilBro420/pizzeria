@@ -98,7 +98,7 @@ export function PayScreen({
 
   // Botón "ACEPTAR" del teclado numérico
   const handleAceptarMonto = () => {
-    if (restanteCents <= 0 && pagos.length > 0) return
+    if (restanteCents <= 0 && pagos.length > 0 && inputEnMXNCents <= 0) return
 
     let montoAplicarCents = 0
     let montoRecibidoCents = 0
@@ -130,30 +130,31 @@ export function PayScreen({
       cambio: (montoRecibidoCents - montoAplicarCents) / 100,
     }
 
-    setPagos([...pagos, nuevoPago])
+    // Reemplaza o agrega el pago para este método específico
+    const sinActual = pagos.filter(p => p.metodo !== selectedMethod)
+    setPagos([...sinActual, nuevoPago])
     setInputMonto('')
   }
 
-  const handleRemovePayment = (index: number) => {
-    setPagos(pagos.filter((_, idx) => idx !== index))
+  const handleClearMethodPayment = (metodo: MetodoPago, e: React.MouseEvent) => {
+    e.stopPropagation()
+    setPagos(pagos.filter(p => p.metodo !== metodo))
     setCambioPermanente(null)
   }
 
-  // Botón "PAGAR CUENTA"
+  // Botón "PAGAR CUENTA" (movido a Resumen de Cuenta hasta abajo)
   const handlePagarCuenta = () => {
     if (restanteCents > 0) {
       if (inputEnMXNCents >= restanteCents) {
         const montoAplicarCents = restanteCents
         const recibidoCents = inputEnMXNCents
-        const lista = [
-          ...pagos,
-          {
-            metodo: selectedMethod,
-            monto: montoAplicarCents / 100,
-            montoRecibido: recibidoCents / 100,
-            cambio: (recibidoCents - montoAplicarCents) / 100,
-          },
-        ]
+        const nuevo = {
+          metodo: selectedMethod,
+          monto: montoAplicarCents / 100,
+          montoRecibido: recibidoCents / 100,
+          cambio: (recibidoCents - montoAplicarCents) / 100,
+        }
+        const lista = [...pagos.filter(p => p.metodo !== selectedMethod), nuevo]
         onConfirm(
           lista.map(p => ({
             metodo: p.metodo as any,
@@ -365,21 +366,90 @@ export function PayScreen({
           </Panel>
         </div>
 
-        {/* Panel 2 (Centro): Teclado Numérico con botón ACEPTAR MONTO y PAGAR CUENTA */}
+        {/* Panel 2 (Centro): 4 Recuadros de Métodos con monto registrado + NumPad */}
         <div className="md:col-span-2 lg:col-span-4 flex flex-col min-h-0 order-2 md:order-3 lg:order-2">
           <Panel title="IMPORTE RECIBIDO" className="h-full">
-            <div className="p-3 sm:p-4 flex flex-col h-full justify-between bg-white overflow-y-auto">
-              {/* Display de monto recibido */}
-              <div className="mb-2 max-w-sm sm:max-w-md mx-auto w-full">
+            <div className="p-3 sm:p-4 flex flex-col h-full justify-between bg-white overflow-y-auto gap-2">
+              {/* 4 Recuadros de Métodos de Pago con su monto registrado ($00.00 por defecto) */}
+              <div>
+                <span className="text-[11px] font-extrabold text-slate-600 uppercase tracking-wider mb-1.5 block">
+                  Pagos por Método de Pago:
+                </span>
+                <div className="grid grid-cols-2 gap-2">
+                  {[
+                    { id: 'efectivo', label: 'EFECTIVO (MXN)', icon: <CashIcon className="w-4 h-4" /> },
+                    { id: 'dolares', label: 'DÓLARES (USD)', icon: <DollarIcon className="w-4 h-4" /> },
+                    { id: 'tarjeta', label: 'TARJETA', icon: <CardIcon className="w-4 h-4" /> },
+                    { id: 'transferencia', label: 'TRANSFERENCIA', icon: <TransferIcon className="w-4 h-4" /> },
+                  ].map(m => {
+                    const isSel = selectedMethod === m.id
+                    const pagoExistente = pagos.find(p => p.metodo === m.id)
+                    const tienePago = Boolean(pagoExistente && pagoExistente.monto > 0)
+                    const montoTexto = tienePago ? fmt(pagoExistente!.monto) : '$00.00'
+
+                    return (
+                      <div
+                        key={m.id}
+                        onClick={() => {
+                          setSelectedMethod(m.id as any)
+                          setInputMonto('')
+                        }}
+                        className={`p-2.5 rounded-xl border-2 transition-all cursor-pointer flex flex-col justify-between select-none ${
+                          isSel
+                            ? 'bg-blue-50/80 border-blue-600 ring-2 ring-blue-300 shadow-xs'
+                            : tienePago
+                            ? 'bg-emerald-50/70 border-emerald-500 shadow-2xs'
+                            : 'bg-slate-50 border-slate-200 hover:border-slate-300 hover:bg-slate-100'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-1.5">
+                            <span className={isSel ? 'text-blue-600' : tienePago ? 'text-emerald-600' : 'text-slate-500'}>
+                              {m.icon}
+                            </span>
+                            <span className="text-[11px] font-black tracking-tight text-slate-800">
+                              {m.label}
+                            </span>
+                          </div>
+                          {tienePago && (
+                            <button
+                              type="button"
+                              onClick={e => handleClearMethodPayment(m.id as any, e)}
+                              className="w-4 h-4 rounded-full bg-slate-200 hover:bg-rose-500 hover:text-white text-slate-600 flex items-center justify-center text-[10px] font-bold transition-colors"
+                              title="Borrar monto de este método"
+                            >
+                              ×
+                            </button>
+                          )}
+                        </div>
+
+                        <div className="mt-1 flex justify-between items-baseline">
+                          <span className="text-[10px] font-bold text-slate-400 uppercase">Monto:</span>
+                          <span
+                            className={`font-mono text-base font-black ${
+                              tienePago ? 'text-emerald-700' : 'text-slate-400'
+                            }`}
+                          >
+                            {montoTexto}
+                          </span>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+
+              {/* Display de monto recibido a teclear */}
+              <div className="max-w-sm sm:max-w-md mx-auto w-full">
                 <div className="text-[11px] font-extrabold text-slate-600 uppercase tracking-wider mb-1 flex justify-between">
-                  <span>Importe recibido:</span>
+                  <span>Importe a registrar:</span>
                   {selectedMethod === 'dolares' && inputNumber > 0 && (
                     <span className="text-emerald-700 font-black">
                       ≈ ${inputEnMXN.toFixed(2)} MXN
                     </span>
                   )}
                 </div>
-                <div className="h-12 sm:h-14 px-3 rounded-xl flex items-center justify-end text-2xl sm:text-3xl font-mono font-black bg-slate-100 border border-slate-300 text-slate-900">
+                <div className="h-11 sm:h-12 px-3 rounded-xl flex items-center justify-end text-2xl font-mono font-black bg-slate-100 border border-slate-300 text-slate-900">
                   {inputMonto
                     ? selectedMethod === 'dolares'
                       ? `$${inputMonto} USD`
@@ -389,7 +459,7 @@ export function PayScreen({
               </div>
 
               {/* Teclado numérico táctil */}
-              <div className="flex-1 flex flex-col justify-center my-1 max-w-sm sm:max-w-md mx-auto w-full">
+              <div className="flex-1 flex flex-col justify-center my-0.5 max-w-sm sm:max-w-md mx-auto w-full">
                 <NumPad
                   value={inputMonto}
                   onChange={setInputMonto}
@@ -398,28 +468,11 @@ export function PayScreen({
                   enterLabel="ACEPTAR MONTO"
                 />
               </div>
-
-              {/* Botón único principal: PAGAR CUENTA */}
-              <div className="pt-2.5 border-t border-slate-200 max-w-sm sm:max-w-md mx-auto w-full">
-                <button
-                  type="button"
-                  disabled={!cuentaCubierta && pagos.length === 0}
-                  onClick={handlePagarCuenta}
-                  className={`w-full py-3.5 sm:py-4 px-6 rounded-xl font-black text-lg sm:text-xl tracking-wider text-white shadow-lg transition-all active:scale-98 flex items-center justify-center gap-2 ${
-                    cuentaCubierta || pagos.length > 0
-                      ? 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-600/30 cursor-pointer'
-                      : 'bg-slate-300 text-slate-500 cursor-not-allowed shadow-none'
-                  }`}
-                >
-                  <CheckIcon className="w-5 h-5" />
-                  <span>PAGAR CUENTA</span>
-                </button>
-              </div>
             </div>
           </Panel>
         </div>
 
-        {/* Panel 3 (Derecha): Resumen de Cuenta con Cambio del mismo diseño que Restante */}
+        {/* Panel 3 (Derecha): Resumen de Cuenta con Cambio y Botón PAGAR CUENTA hasta abajo */}
         <div className="lg:col-span-4 flex flex-col min-h-0 order-3 md:order-2 lg:order-3">
           <Panel title="RESUMEN DE CUENTA" className="h-full">
             <div className="p-3 sm:p-4 flex flex-col h-full justify-between bg-white overflow-y-auto">
@@ -464,57 +517,8 @@ export function PayScreen({
                 </div>
               </div>
 
-              {/* Pagos ya aplicados */}
-              <div className="mt-3 pt-2.5 border-t border-slate-200 flex-1 flex flex-col min-h-[90px]">
-                <span className="text-[11px] font-extrabold text-slate-500 uppercase tracking-wider mb-1 block">
-                  Pagos Registrados ({pagos.length}):
-                </span>
-                <div className="flex-1 overflow-y-auto space-y-1.5 p-1.5 bg-slate-50 rounded-xl border border-slate-200 max-h-36">
-                  {pagos.length === 0 ? (
-                    <div className="text-xs text-slate-400 italic p-2 text-center">
-                      Teclea el monto recibido y pulsa Aceptar.
-                    </div>
-                  ) : (
-                    pagos.map((p, idx) => (
-                      <div
-                        key={idx}
-                        className="bg-white p-2 rounded-lg border border-slate-200 flex items-center justify-between text-xs font-bold"
-                      >
-                        <div>
-                          <span className="uppercase text-blue-800 font-black block">
-                            {p.metodo === 'efectivo'
-                              ? 'Efectivo (MXN)'
-                              : p.metodo === 'dolares'
-                              ? 'Dólares (USD)'
-                              : p.metodo === 'tarjeta'
-                              ? 'Tarjeta'
-                              : 'Transferencia'}
-                          </span>
-                          {p.montoRecibido && p.montoRecibido > p.monto && (
-                            <span className="text-[11px] text-slate-500 block font-normal">
-                              Recibió: {fmt(p.montoRecibido)}
-                            </span>
-                          )}
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <span className="font-mono text-sm text-slate-900 font-black">{fmt(p.monto)}</span>
-                          <button
-                            type="button"
-                            onClick={() => handleRemovePayment(idx)}
-                            className="w-5 h-5 rounded bg-rose-50 text-rose-600 hover:bg-rose-100 font-black text-xs flex items-center justify-center transition-colors"
-                            title="Quitar pago"
-                          >
-                            <CrossIcon className="w-3 h-3 stroke-[3]" />
-                          </button>
-                        </div>
-                      </div>
-                    ))
-                  )}
-                </div>
-              </div>
-
               {/* Estado de Cobro: Restante y Cambio CON EL MISMO DISEÑO EXACTO */}
-              <div className="mt-3 pt-2.5 border-t border-slate-200 flex flex-col gap-1.5">
+              <div className="mt-3 pt-3 border-t border-slate-200 flex flex-col gap-2">
                 {/* Restante por cobrar */}
                 <div className="flex justify-between items-baseline">
                   <span className="text-xs font-bold text-slate-500 uppercase">Restante por Cobrar:</span>
@@ -527,8 +531,8 @@ export function PayScreen({
                   </span>
                 </div>
 
-                {/* Cambio a devolver (MISMO DISEÑO que Restante por cobrar, sin recuadros estridentes) */}
-                <div className="flex justify-between items-baseline pt-1 border-t border-slate-100">
+                {/* Cambio a devolver (MISMO DISEÑO que Restante por cobrar) */}
+                <div className="flex justify-between items-baseline pt-1.5 border-t border-slate-100">
                   <span className="text-xs font-bold text-slate-500 uppercase">Cambio a Devolver:</span>
                   <span
                     className={`font-mono text-2xl font-black ${
@@ -538,6 +542,23 @@ export function PayScreen({
                     {fmt(cambioMostrar)}
                   </span>
                 </div>
+              </div>
+
+              {/* Botón único principal: PAGAR CUENTA hasta abajo */}
+              <div className="pt-3 border-t border-slate-200 mt-3">
+                <button
+                  type="button"
+                  disabled={!cuentaCubierta && pagos.length === 0}
+                  onClick={handlePagarCuenta}
+                  className={`w-full py-3.5 sm:py-4 px-6 rounded-xl font-black text-lg sm:text-xl tracking-wider text-white shadow-lg transition-all active:scale-98 flex items-center justify-center gap-2 ${
+                    cuentaCubierta || pagos.length > 0
+                      ? 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-600/30 cursor-pointer'
+                      : 'bg-slate-300 text-slate-500 cursor-not-allowed shadow-none'
+                  }`}
+                >
+                  <CheckIcon className="w-5 h-5 stroke-[3]" />
+                  <span>PAGAR CUENTA</span>
+                </button>
               </div>
             </div>
           </Panel>

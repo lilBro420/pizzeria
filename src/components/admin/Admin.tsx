@@ -250,7 +250,7 @@ export function Admin({ usuario, onLogout, onGoPOS, onGoCocina }: AdminProps) {
           { id: 'categorias', label: 'CATEGORÍAS' },
           { id: 'config', label: 'CONFIGURACIÓN GENERAL' },
           { id: 'usuarios', label: 'USUARIOS Y PRIVILEGIOS' },
-          { id: 'notificaciones', label: '🔔 NOTIFICACIONES PUSH' },
+          { id: 'notificaciones', label: 'NOTIFICACIONES PUSH' },
         ].map(t => (
           <Button
             key={t.id}
@@ -741,10 +741,10 @@ export function Admin({ usuario, onLogout, onGoPOS, onGoCocina }: AdminProps) {
                 <span className="text-xs font-bold text-gray-500 uppercase block">Estado del Permiso:</span>
                 <span className="text-sm font-black text-black">
                   {notifications.getPermission() === 'granted'
-                    ? '✅ Permitido en este dispositivo'
+                    ? 'Permitido en este dispositivo'
                     : notifications.getPermission() === 'denied'
-                    ? '❌ Bloqueado en el navegador'
-                    : '⏳ Pendiente de autorización'}
+                    ? 'Bloqueado en el navegador'
+                    : 'Pendiente de autorización'}
                 </span>
               </div>
               <Button
@@ -776,14 +776,14 @@ export function Admin({ usuario, onLogout, onGoPOS, onGoCocina }: AdminProps) {
                   size="md"
                   variant="default"
                   onClick={async () => {
-                    const ok = await notifications.sendNotification('🍕 Pizzería Volcán', {
+                    const ok = await notifications.sendNotification('Pizzería Volcán', {
                       body: 'Notificación de prueba del sistema POS enviada.',
                     })
                     setNotifMsg(ok ? 'Notificación enviada con éxito' : 'No se pudo enviar la notificación')
                   }}
                   className="text-xs font-black py-3"
                 >
-                  🔔 PRUEBA GENERAL
+                  PRUEBA GENERAL
                 </Button>
                 <Button
                   size="md"
@@ -794,7 +794,7 @@ export function Admin({ usuario, onLogout, onGoPOS, onGoCocina }: AdminProps) {
                   }}
                   className="text-xs font-black py-3"
                 >
-                  🍕 ALERTA COCINA
+                  ALERTA COCINA
                 </Button>
                 <Button
                   size="md"
@@ -805,7 +805,7 @@ export function Admin({ usuario, onLogout, onGoPOS, onGoCocina }: AdminProps) {
                   }}
                   className="text-xs font-black py-3"
                 >
-                  🛵 PEDIDO LISTO
+                  PEDIDO LISTO
                 </Button>
               </div>
             </div>
