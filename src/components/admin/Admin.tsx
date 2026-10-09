@@ -12,6 +12,8 @@ import { Button } from '../ui/Button'
 import { Panel } from '../ui/Panel'
 import { Dialog } from '../ui/Dialog'
 import { CancelDialog } from '../modals/CancelDialog'
+import { notifications } from '../../services/notifications'
+import { BellIcon } from '../ui/Icons'
 
 interface AdminProps {
   usuario: UsuarioActual
@@ -21,7 +23,11 @@ interface AdminProps {
 }
 
 export function Admin({ usuario, onLogout, onGoPOS, onGoCocina }: AdminProps) {
-  const [tab, setTab] = useState<'dashboard' | 'pedidos' | 'menu' | 'categorias' | 'config' | 'usuarios'>('dashboard')
+  const [tab, setTab] = useState<
+    'dashboard' | 'pedidos' | 'menu' | 'categorias' | 'config' | 'usuarios' | 'notificaciones'
+  >('dashboard')
+  const [notifPermission, setNotifPermission] = useState<NotificationPermission>('default')
+  const [notifMsg, setNotifMsg] = useState<string | null>(null)
   const [catalogo, setCatalogo] = useState<Catalogo | null>(null)
   const [ordenes, setOrdenes] = useState<Orden[]>([])
   const [dashboardData, setDashboardData] = useState<any>(null)
@@ -206,26 +212,26 @@ export function Admin({ usuario, onLogout, onGoPOS, onGoCocina }: AdminProps) {
   }
 
   return (
-    <div className="h-screen w-screen flex flex-col bg-[#D4D0C8] p-2 select-none overflow-hidden">
+    <div className="min-h-[100dvh] lg:h-screen w-full flex flex-col bg-[#D4D0C8] p-2 select-none overflow-y-auto lg:overflow-hidden font-sans">
       {/* ── Top Bar ── */}
-      <div className="bg-[#0A246A] text-white px-3 py-1.5 flex items-center justify-between border-2 border-black swing-outset shrink-0 mb-2">
+      <div className="bg-[#0A246A] text-white px-3 py-2 flex flex-wrap items-center justify-between border-2 border-black swing-outset shrink-0 mb-2 gap-2">
         <div className="flex items-center gap-3">
-          <span className="text-xl font-black tracking-wide font-sans">PANEL DE ADMINISTRACIÓN</span>
+          <span className="text-lg sm:text-xl font-black tracking-wide font-sans">PANEL DE ADMINISTRACIÓN</span>
           <span className="text-xs bg-[#1F4E79] px-2 py-0.5 font-mono text-gray-200">
             Admin: {usuario.nombre}
           </span>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           {onGoPOS && (
             <Button size="sm" variant="success" onClick={onGoPOS} className="text-xs font-black py-1 px-3">
-              IR AL PUNTO DE VENTA (POS)
+              IR AL POS
             </Button>
           )}
 
           {onGoCocina && (
             <Button size="sm" variant="warning" onClick={onGoCocina} className="text-xs font-bold py-1 px-3">
-              MONITOR COCINA
+              COCINA
             </Button>
           )}
 
@@ -236,7 +242,7 @@ export function Admin({ usuario, onLogout, onGoPOS, onGoCocina }: AdminProps) {
       </div>
 
       {/* ── Admin Tabs ── */}
-      <div className="flex gap-1 shrink-0 pb-1">
+      <div className="flex gap-1 shrink-0 pb-1 overflow-x-auto scrollbar-none">
         {[
           { id: 'dashboard', label: 'DASHBOARD Y VENTAS' },
           { id: 'pedidos', label: 'PEDIDOS Y CUENTAS' },
@@ -244,6 +250,7 @@ export function Admin({ usuario, onLogout, onGoPOS, onGoCocina }: AdminProps) {
           { id: 'categorias', label: 'CATEGORÍAS' },
           { id: 'config', label: 'CONFIGURACIÓN GENERAL' },
           { id: 'usuarios', label: 'USUARIOS Y PRIVILEGIOS' },
+          { id: 'notificaciones', label: '🔔 NOTIFICACIONES PUSH' },
         ].map(t => (
           <Button
             key={t.id}
@@ -251,7 +258,7 @@ export function Admin({ usuario, onLogout, onGoPOS, onGoCocina }: AdminProps) {
             variant="tab"
             active={tab === t.id}
             onClick={() => setTab(t.id as any)}
-            className="text-xs font-bold"
+            className="text-xs font-bold shrink-0"
           >
             {t.label}
           </Button>
@@ -712,6 +719,105 @@ export function Admin({ usuario, onLogout, onGoPOS, onGoCocina }: AdminProps) {
                   </div>
                 </div>
               ))}
+            </div>
+          </div>
+        )}
+
+        {/* 7. Notificaciones Push y Alertas */}
+        {tab === 'notificaciones' && (
+          <div className="flex flex-col gap-4 max-w-2xl bg-white p-5 rounded-xl border border-gray-300 shadow-sm">
+            <div>
+              <span className="text-lg font-black text-black block mb-1">
+                NOTIFICACIONES PUSH & ALERTAS EN TIEMPO REAL
+              </span>
+              <p className="text-xs text-gray-600">
+                Configura y prueba la recepción de notificaciones en el sistema operativo, móviles (Android / iOS) y tabletas.
+              </p>
+            </div>
+
+            {/* Estado del permiso */}
+            <div className="p-4 bg-gray-50 border rounded-xl flex items-center justify-between">
+              <div>
+                <span className="text-xs font-bold text-gray-500 uppercase block">Estado del Permiso:</span>
+                <span className="text-sm font-black text-black">
+                  {notifications.getPermission() === 'granted'
+                    ? '✅ Permitido en este dispositivo'
+                    : notifications.getPermission() === 'denied'
+                    ? '❌ Bloqueado en el navegador'
+                    : '⏳ Pendiente de autorización'}
+                </span>
+              </div>
+              <Button
+                size="sm"
+                variant="primary"
+                onClick={async () => {
+                  const p = await notifications.requestPermission()
+                  setNotifPermission(p)
+                  setNotifMsg(p === 'granted' ? 'Permisos otorgados correctamente' : 'Permiso no otorgado')
+                }}
+              >
+                SOLICITAR PERMISOS
+              </Button>
+            </div>
+
+            {notifMsg && (
+              <div className="p-3 bg-blue-50 border border-blue-200 text-blue-900 text-xs font-bold rounded-lg">
+                {notifMsg}
+              </div>
+            )}
+
+            {/* Botones de prueba */}
+            <div className="space-y-2">
+              <span className="text-xs font-black text-gray-700 uppercase block">
+                Disparar Pruebas de Notificación:
+              </span>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                <Button
+                  size="md"
+                  variant="default"
+                  onClick={async () => {
+                    const ok = await notifications.sendNotification('🍕 Pizzería Volcán', {
+                      body: 'Notificación de prueba del sistema POS enviada.',
+                    })
+                    setNotifMsg(ok ? 'Notificación enviada con éxito' : 'No se pudo enviar la notificación')
+                  }}
+                  className="text-xs font-black py-3"
+                >
+                  🔔 PRUEBA GENERAL
+                </Button>
+                <Button
+                  size="md"
+                  variant="warning"
+                  onClick={async () => {
+                    await notifications.notifyNewKitchenOrder('#4099', 2, 'Pizza Familiar, Refresco')
+                    setNotifMsg('Alerta sonora y push de cocina enviada.')
+                  }}
+                  className="text-xs font-black py-3"
+                >
+                  🍕 ALERTA COCINA
+                </Button>
+                <Button
+                  size="md"
+                  variant="success"
+                  onClick={async () => {
+                    await notifications.notifyOrderReady('#4099', 'domicilio', 'Juan Gómez')
+                    setNotifMsg('Alerta de entrega enviada.')
+                  }}
+                  className="text-xs font-black py-3"
+                >
+                  🛵 PEDIDO LISTO
+                </Button>
+              </div>
+            </div>
+
+            {/* Guía móvil */}
+            <div className="p-4 bg-blue-50 border border-blue-200 rounded-xl text-xs space-y-2 text-blue-950">
+              <span className="font-black block uppercase">Guía para probar en Móviles y Tabletas:</span>
+              <ul className="list-disc list-inside space-y-1 text-blue-900">
+                <li><strong>En Android (Chrome):</strong> Concede permisos al presionar &quot;SOLICITAR PERMISOS&quot;. Al pulsar prueba, vibrará y sonará la campana.</li>
+                <li><strong>En iPhone / iPad (Safari iOS 16.4+):</strong> Abre la página en Safari, presiona el botón Compartir y elige <em>&quot;Añadir a pantalla de inicio&quot;</em>. Al abrir la app desde el icono en tu pantalla, soporta notificaciones push completas.</li>
+                <li><strong>En Pantalla Dividida o Segundo Plano:</strong> Si cambias de pestaña o minimizas el navegador, las notificaciones seguirán apareciendo en la bandeja del sistema.</li>
+              </ul>
             </div>
           </div>
         )}

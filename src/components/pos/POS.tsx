@@ -21,9 +21,12 @@ import { ExitMenuModal } from '../modals/ExitMenuModal'
 import { CancelDialog } from '../modals/CancelDialog'
 import { TurnoModal } from '../modals/TurnoModal'
 import { ConsultarNotasModal } from '../modals/ConsultarNotasModal'
+import { PushNotificationModal } from '../modals/PushNotificationModal'
+import { notifications } from '../../services/notifications'
 import { PayScreen } from './PayScreen'
 import {
   AlertIcon,
+  BellIcon,
   CartIcon,
   CheckIcon,
   ClockIcon,
@@ -71,6 +74,7 @@ export function POS({ usuario, onLogout, onGoCocina, onGoAdmin }: POSProps) {
   const [showExit, setShowExit] = useState(false)
   const [showTurno, setShowTurno] = useState(false)
   const [showNotas, setShowNotas] = useState(false)
+  const [showNotifModal, setShowNotifModal] = useState(false)
   const [cancelTarget, setCancelTarget] = useState<Orden | null>(null)
 
   // Pantalla de pago activa
@@ -269,6 +273,11 @@ export function POS({ usuario, onLogout, onGoCocina, onGoAdmin }: POSProps) {
         }
 
         const ordenCreada = await api.createOrden(payload)
+        notifications.notifyNewKitchenOrder(
+          ordenCreada.folio,
+          cart.length,
+          cart.map(c => `${c.cantidad}x ${c.nombre}`).join(', ')
+        )
         alert(`Comanda ${ordenCreada.folio} enviada a cocina (Cuenta en Espera).`)
         setCart([])
         setDescuentoPct(0)
@@ -322,6 +331,7 @@ export function POS({ usuario, onLogout, onGoCocina, onGoAdmin }: POSProps) {
         }
 
         const orden = await api.createOrden(payload)
+        notifications.notifyOrderReady(orden.folio, orden.tipo, orden.cliente?.nombre)
         alert(`Orden ${orden.folio} cobrada e impresa exitosamente.`)
         setCart([])
         setDescuentoPct(0)
@@ -331,6 +341,7 @@ export function POS({ usuario, onLogout, onGoCocina, onGoAdmin }: POSProps) {
         const orden = await api.pagarOrden(payScreenState.ordenId, {
           pagos: pagosList,
         })
+        notifications.notifyOrderReady(orden.folio, orden.tipo, orden.cliente?.nombre)
         alert(`Cuenta ${orden.folio} cobrada exitosamente.`)
         setPayScreenState(null)
       }
@@ -420,7 +431,7 @@ export function POS({ usuario, onLogout, onGoCocina, onGoAdmin }: POSProps) {
   })
 
   return (
-    <div className="h-screen w-screen flex flex-col bg-slate-100 p-2 sm:p-3 select-none overflow-hidden font-sans">
+    <div className="min-h-[100dvh] lg:h-screen w-full flex flex-col bg-slate-100 p-2 sm:p-3 select-none overflow-y-auto lg:overflow-hidden font-sans">
       {/* ── Top Bar Moderna ── */}
       <header className="bg-slate-900 text-white px-3 sm:px-4 py-2 sm:py-2.5 rounded-2xl flex items-center justify-between shadow-md shrink-0 mb-2 border border-slate-800">
         <div className="flex items-center gap-2 sm:gap-3">
@@ -462,6 +473,17 @@ export function POS({ usuario, onLogout, onGoCocina, onGoAdmin }: POSProps) {
         </div>
 
         <div className="flex items-center gap-1.5 sm:gap-2">
+          {/* Notificaciones Push */}
+          <button
+            type="button"
+            onClick={() => setShowNotifModal(true)}
+            className="h-9 sm:h-10 px-2.5 sm:px-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-amber-300 font-black text-xs border border-slate-700 active:scale-95 transition-all flex items-center gap-1.5 cursor-pointer"
+            title="Probar y configurar Notificaciones Push"
+          >
+            <BellIcon className="w-3.5 h-3.5 text-amber-400" />
+            <span className="hidden md:inline">NOTIFICACIONES</span>
+          </button>
+
           {/* Cuentas en Espera */}
           <button
             type="button"
@@ -982,6 +1004,10 @@ export function POS({ usuario, onLogout, onGoCocina, onGoAdmin }: POSProps) {
           notasRapidas={catalogo.notasRapidas}
           onClose={() => setShowNotas(false)}
         />
+      )}
+
+      {showNotifModal && (
+        <PushNotificationModal onClose={() => setShowNotifModal(false)} />
       )}
 
       {cancelTarget && (

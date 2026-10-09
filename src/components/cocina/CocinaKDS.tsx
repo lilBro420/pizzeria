@@ -45,7 +45,7 @@ export function CocinaKDS({ usuario, onBack }: CocinaKDSProps) {
   }
 
   return (
-    <div className="h-screen w-screen flex flex-col bg-[#2A3439] select-none text-white overflow-hidden p-2">
+    <div className="min-h-[100dvh] lg:h-screen w-full flex flex-col bg-[#2A3439] select-none text-white overflow-y-auto lg:overflow-hidden p-2">
       {/* KDS Top Bar */}
       <div className="bg-[#1C2327] px-4 py-2 flex items-center justify-between border-2 border-black swing-outset shrink-0 mb-2">
         <div className="flex items-center gap-4">
