@@ -1,8 +1,9 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { Orden, UsuarioActual } from '../../types'
 import { api } from '../../services/api'
+import { notifications } from '../../services/notifications'
 import { Button } from '../ui/Button'
-import { Panel } from '../ui/Panel'
+import { BellIcon } from '../ui/Icons'
 
 interface CocinaKDSProps {
   usuario: UsuarioActual
@@ -16,9 +17,33 @@ export function CocinaKDS({ usuario, onBack }: CocinaKDSProps) {
   const [verImpresas, setVerImpresas] = useState(false)
   const [loading, setLoading] = useState(true)
 
+  const knownIdsRef = useRef<Set<number>>(new Set())
+  const isInitialRef = useRef(true)
+
   const loadComandas = async () => {
     try {
       const data = await api.getComandas(verImpresas)
+
+      // Detección en tiempo real de nuevas comandas entrantes
+      if (isInitialRef.current) {
+        data.pendientes.forEach(o => knownIdsRef.current.add(o.id))
+        isInitialRef.current = false
+      } else {
+        const nuevas = data.pendientes.filter(o => !knownIdsRef.current.has(o.id))
+        if (nuevas.length > 0) {
+          for (const n of nuevas) {
+            knownIdsRef.current.add(n.id)
+            const itemsTxt = n.items.map(i => `${i.cantidad}x ${i.nombre}`).join(', ')
+            const mesaTxt = n.mesa ? ` (Mesa ${n.mesa})` : n.tipo ? ` (${n.tipo.toUpperCase()})` : ''
+            notifications.notifyNewKitchenOrder(
+              `${n.folio}${mesaTxt}`,
+              n.items.length,
+              itemsTxt
+            )
+          }
+        }
+      }
+
       setPendientes(data.pendientes)
       setCanceladas(data.canceladas)
       setImpresas(data.impresas)
@@ -31,38 +56,59 @@ export function CocinaKDS({ usuario, onBack }: CocinaKDSProps) {
 
   useEffect(() => {
     loadComandas()
-    const timer = setInterval(loadComandas, 4000)
+    const timer = setInterval(loadComandas, 3500)
     return () => clearInterval(timer)
   }, [verImpresas])
 
   const handleImprimir = async (id: number) => {
     try {
+      const ord = pendientes.find(p => p.id === id)
       await api.imprimirComanda(id)
+      if (ord) {
+        notifications.notifyOrderReady(ord.folio, ord.tipo, ord.cliente?.nombre)
+      }
       await loadComandas()
     } catch (err: any) {
       alert(`Error al imprimir comanda: ${err.message}`)
     }
   }
 
+  const handleTestCampana = () => {
+    notifications.unlockAudio()
+    notifications.playChime('kitchen')
+    notifications.vibrate([100, 50, 100])
+  }
+
   return (
     <div className="min-h-[100dvh] lg:h-screen w-full flex flex-col bg-[#2A3439] select-none text-white overflow-y-auto lg:overflow-hidden p-2">
       {/* KDS Top Bar */}
-      <div className="bg-[#1C2327] px-4 py-2 flex items-center justify-between border-2 border-black swing-outset shrink-0 mb-2">
-        <div className="flex items-center gap-4">
+      <div className="bg-[#1C2327] px-3 sm:px-4 py-2 flex items-center justify-between border-2 border-black swing-outset shrink-0 mb-2 gap-2 flex-wrap sm:flex-nowrap">
+        <div className="flex items-center gap-2 sm:gap-4">
           <Button size="sm" variant="default" onClick={onBack} className="text-xs font-bold py-1">
             ← VOLVER AL POS
           </Button>
-          <span className="text-xl font-black tracking-wider text-yellow-400">
+          <span className="text-base sm:text-xl font-black tracking-wider text-yellow-400">
             MONITOR DE COCINA (KDS)
           </span>
-          <span className="text-xs text-gray-400 font-mono">
+          <span className="text-xs text-gray-400 font-mono hidden md:inline">
             {usuario.nombre} ({usuario.rol.toUpperCase()})
           </span>
         </div>
 
-        <div className="flex items-center gap-3">
-          <span className="text-xs font-bold bg-[#E65100] px-3 py-1 text-white border border-[#FF9800]">
-            {pendientes.length} COMANDAS POR PREPARAR
+        <div className="flex items-center gap-2">
+          {/* Botón para probar / desbloquear campana de cocina */}
+          <button
+            type="button"
+            onClick={handleTestCampana}
+            className="bg-amber-500 hover:bg-amber-400 active:scale-95 text-slate-950 px-2.5 py-1 rounded-lg font-black text-xs flex items-center gap-1.5 shadow-sm transition-all cursor-pointer"
+            title="Toca para probar o activar el sonido de la campana de cocina"
+          >
+            <BellIcon className="w-3.5 h-3.5 fill-current" />
+            <span>PROBAR CAMPANA</span>
+          </button>
+
+          <span className="text-xs font-bold bg-[#E65100] px-2.5 sm:px-3 py-1 text-white border border-[#FF9800]">
+            {pendientes.length} PENDIENTES
           </span>
 
           <Button
@@ -71,7 +117,7 @@ export function CocinaKDS({ usuario, onBack }: CocinaKDSProps) {
             onClick={() => setVerImpresas(!verImpresas)}
             className="text-xs font-bold py-1"
           >
-            {verImpresas ? 'OCULTAR IMPRESAS' : 'VER IMPRESAS RECIENTES'}
+            {verImpresas ? 'OCULTAR IMPRESAS' : 'VER IMPRESAS'}
           </Button>
         </div>
       </div>

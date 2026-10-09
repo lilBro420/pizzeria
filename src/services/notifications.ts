@@ -14,10 +14,29 @@ class NotificationService {
   private swRegistration: ServiceWorkerRegistration | null = null
   private audioCtx: AudioContext | null = null
   private listeners: Set<NotificationListener> = new Set()
+  private channel: BroadcastChannel | null = null
 
   constructor() {
     this.registerServiceWorker()
     this.initAudioUnlock()
+    this.initBroadcastChannel()
+  }
+
+  // Canal para sincronizar notificaciones entre pestañas y ventanas
+  private initBroadcastChannel() {
+    if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+      try {
+        this.channel = new BroadcastChannel('pizzeria_notifications_channel')
+        this.channel.onmessage = event => {
+          const data = event.data
+          if (data && data.type === 'push_notification') {
+            this.sendNotification(data.title, data.options, false)
+          }
+        }
+      } catch {
+        // ignore
+      }
+    }
   }
 
   // Desbloqueo proactivo de audio en iOS Safari en el primer toque del usuario
@@ -127,42 +146,55 @@ class NotificationService {
       const now = this.audioCtx.currentTime
 
       if (type === 'kitchen') {
-        // Campanazo de cocina
-        this.playTone(880, now, 0.25)
-        this.playTone(1174.66, now + 0.15, 0.4)
+        // Campana de comanda de cocina: Triple Ding claro y metálico (1046Hz, 1318Hz, 1568Hz)
+        this.playBell(1046.5, now, 0.45)
+        this.playBell(1318.51, now + 0.16, 0.5)
+        this.playBell(1567.98, now + 0.32, 0.9)
       } else if (type === 'ready') {
         // Tono ascendente de orden lista
-        this.playTone(523.25, now, 0.15)
-        this.playTone(659.25, now + 0.12, 0.15)
-        this.playTone(783.99, now + 0.24, 0.35)
+        this.playBell(523.25, now, 0.25)
+        this.playBell(659.25, now + 0.12, 0.25)
+        this.playBell(783.99, now + 0.24, 0.55)
       } else {
         // Alerta estándar
-        this.playTone(587.33, now, 0.2)
-        this.playTone(880, now + 0.15, 0.3)
+        this.playBell(587.33, now, 0.2)
+        this.playBell(880, now + 0.15, 0.35)
       }
     } catch (e) {
       console.warn('Audio feedback no disponible:', e)
     }
   }
 
-  private playTone(freq: number, start: number, duration: number) {
+  // Síntesis de campana con armónicos metálicos percusivos
+  private playBell(freq: number, start: number, duration: number) {
     if (!this.audioCtx) return
     try {
-      const osc = this.audioCtx.createOscillator()
+      const osc1 = this.audioCtx.createOscillator()
+      const osc2 = this.audioCtx.createOscillator()
       const gain = this.audioCtx.createGain()
-      osc.type = 'sine'
-      osc.frequency.setValueAtTime(freq, start)
 
-      gain.gain.setValueAtTime(0.3, start)
+      // Tono fundamental
+      osc1.type = 'sine'
+      osc1.frequency.setValueAtTime(freq, start)
+
+      // Armónico metálico percusivo
+      osc2.type = 'triangle'
+      osc2.frequency.setValueAtTime(freq * 2.01, start)
+
+      gain.gain.setValueAtTime(0.001, start)
+      gain.gain.linearRampToValueAtTime(0.7, start + 0.015)
       gain.gain.exponentialRampToValueAtTime(0.001, start + duration)
 
-      osc.connect(gain)
+      osc1.connect(gain)
+      osc2.connect(gain)
       gain.connect(this.audioCtx.destination)
 
-      osc.start(start)
-      osc.stop(start + duration)
+      osc1.start(start)
+      osc2.start(start)
+      osc1.stop(start + duration)
+      osc2.stop(start + duration)
     } catch {
-      // ignore audio errors
+      // ignore
     }
   }
 
@@ -178,7 +210,22 @@ class NotificationService {
   }
 
   // Enviar una Notificación Push (emite In-App Banner + Notificación nativa OS)
-  public async sendNotification(title: string, options: NotificationOptions = {}): Promise<boolean> {
+  public async sendNotification(
+    title: string,
+    options: NotificationOptions = {},
+    broadcast = true
+  ): Promise<boolean> {
+    // Sincronizar con otras pestañas/pantallas en el mismo navegador
+    if (broadcast && this.channel) {
+      try {
+        this.channel.postMessage({
+          type: 'push_notification',
+          title,
+          options,
+        })
+      } catch {}
+    }
+
     // 1. Efecto sonoro y háptico
     this.playChime((options.tag as any) || 'alert')
     this.vibrate([200, 100, 200, 100, 200])

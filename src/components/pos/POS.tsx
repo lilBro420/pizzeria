@@ -273,12 +273,12 @@ export function POS({ usuario, onLogout, onGoCocina, onGoAdmin }: POSProps) {
         }
 
         const ordenCreada = await api.createOrden(payload)
+        const itemsDetalle = cart.map(c => `${c.cantidad}x ${c.nombre}`).join(', ')
         notifications.notifyNewKitchenOrder(
           ordenCreada.folio,
           cart.length,
-          cart.map(c => `${c.cantidad}x ${c.nombre}`).join(', ')
+          itemsDetalle
         )
-        alert(`Comanda ${ordenCreada.folio} enviada a cocina (Cuenta en Espera).`)
         setCart([])
         setDescuentoPct(0)
         setComentariosOrden('')
@@ -331,8 +331,12 @@ export function POS({ usuario, onLogout, onGoCocina, onGoAdmin }: POSProps) {
         }
 
         const orden = await api.createOrden(payload)
-        notifications.notifyOrderReady(orden.folio, orden.tipo, orden.cliente?.nombre)
-        alert(`Orden ${orden.folio} cobrada e impresa exitosamente.`)
+        const itemsDetalle = cart.map(c => `${c.cantidad}x ${c.nombre}`).join(', ')
+        notifications.notifyNewKitchenOrder(
+          orden.folio,
+          cart.length,
+          itemsDetalle
+        )
         setCart([])
         setDescuentoPct(0)
         setComentariosOrden('')
@@ -342,7 +346,6 @@ export function POS({ usuario, onLogout, onGoCocina, onGoAdmin }: POSProps) {
           pagos: pagosList,
         })
         notifications.notifyOrderReady(orden.folio, orden.tipo, orden.cliente?.nombre)
-        alert(`Cuenta ${orden.folio} cobrada exitosamente.`)
         setPayScreenState(null)
       }
 

@@ -68,7 +68,7 @@ export default function App() {
       setActiveNotification(notif)
       setTimeout(() => {
         setActiveNotification(curr => (curr?.id === notif.id ? null : curr))
-      }, 4500)
+      }, 6000)
     })
   }, [])
 
@@ -114,20 +114,36 @@ export default function App() {
     )
   }
 
+  const isKitchen = activeNotification?.tag === 'kitchen'
+
   return (
     <>
-      {/* Banner flotante de Notificación Push para Móviles (iOS / Android / Desktop) */}
+      {/* Banner flotante de Notificación Push para Móviles y KDS */}
       {activeNotification && (
         <div className="fixed top-2 inset-x-2 sm:inset-x-auto sm:right-4 sm:max-w-md z-[9999] animate-in slide-in-from-top-4 duration-200">
-          <div className="bg-slate-900/95 backdrop-blur-md text-white p-3.5 rounded-2xl shadow-2xl border border-slate-700 flex items-start gap-3">
-            <div className="w-8 h-8 rounded-xl bg-blue-600 flex items-center justify-center shrink-0 font-black text-white text-xs shadow-sm">
-              POS
+          <div
+            className={`backdrop-blur-md text-white p-3.5 rounded-2xl shadow-2xl border flex items-start gap-3 transition-all ${
+              isKitchen
+                ? 'bg-slate-950/98 border-amber-400 ring-2 ring-amber-400/50 shadow-amber-500/25'
+                : 'bg-slate-900/95 border-slate-700'
+            }`}
+          >
+            <div
+              className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 font-black text-xs shadow-sm ${
+                isKitchen ? 'bg-amber-500 text-slate-950 animate-pulse' : 'bg-blue-600 text-white'
+              }`}
+            >
+              {isKitchen ? 'COC' : 'POS'}
             </div>
             <div className="flex-1 min-w-0">
-              <span className="text-xs font-black tracking-tight text-white block">
+              <span
+                className={`text-xs font-black tracking-tight block ${
+                  isKitchen ? 'text-amber-300' : 'text-white'
+                }`}
+              >
                 {activeNotification.title}
               </span>
-              <span className="text-[11px] text-slate-300 block mt-0.5 leading-tight">
+              <span className="text-[11px] text-slate-200 block mt-0.5 leading-tight font-medium">
                 {activeNotification.body}
               </span>
             </div>
@@ -136,7 +152,7 @@ export default function App() {
               onClick={() => setActiveNotification(null)}
               className="text-slate-400 hover:text-white text-xs font-bold px-1"
             >
-              ✕
+              ×
             </button>
           </div>
         </div>
