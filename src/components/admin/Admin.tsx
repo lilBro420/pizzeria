@@ -212,13 +212,13 @@ export function Admin({ usuario, onLogout, onGoPOS, onGoCocina }: AdminProps) {
   }
 
   return (
-    <div className="min-h-[100dvh] lg:h-screen w-full flex flex-col bg-[#D4D0C8] p-2 select-none overflow-y-auto lg:overflow-hidden font-sans">
-      {/* ── Top Bar ── */}
-      <div className="bg-[#0A246A] text-white px-3 py-2 flex flex-wrap items-center justify-between border-2 border-black swing-outset shrink-0 mb-2 gap-2">
+    <div className="min-h-[100dvh] lg:h-screen w-full flex flex-col bg-slate-100 p-2 sm:p-3 select-none overflow-y-auto lg:overflow-hidden font-sans">
+      {/* ── Top Bar Moderna ── */}
+      <header className="bg-slate-900 border border-slate-800 text-white px-3 sm:px-4 py-2 sm:py-2.5 rounded-2xl flex flex-wrap items-center justify-between shadow-md shrink-0 mb-2 gap-2">
         <div className="flex items-center gap-3">
-          <span className="text-lg sm:text-xl font-black tracking-wide font-sans">PANEL DE ADMINISTRACIÓN</span>
-          <span className="text-xs bg-[#1F4E79] px-2 py-0.5 font-mono text-gray-200">
-            Admin: {usuario.nombre}
+          <span className="text-base sm:text-lg font-black tracking-tight">PANEL DE ADMINISTRACIÓN</span>
+          <span className="text-xs bg-slate-800 text-slate-300 px-2.5 py-1 rounded-lg border border-slate-700 font-mono hidden sm:inline">
+            Admin: <strong className="text-white">{usuario.nombre}</strong>
           </span>
         </div>
 
@@ -239,10 +239,10 @@ export function Admin({ usuario, onLogout, onGoPOS, onGoCocina }: AdminProps) {
             CERRAR SESIÓN
           </Button>
         </div>
-      </div>
+      </header>
 
-      {/* ── Admin Tabs ── */}
-      <div className="flex gap-1 shrink-0 pb-1 overflow-x-auto scrollbar-none">
+      {/* ── Admin Tabs Pills ── */}
+      <div className="flex gap-1.5 shrink-0 pb-1 overflow-x-auto scrollbar-none">
         {[
           { id: 'dashboard', label: 'DASHBOARD Y VENTAS' },
           { id: 'pedidos', label: 'PEDIDOS Y CUENTAS' },
@@ -251,91 +251,108 @@ export function Admin({ usuario, onLogout, onGoPOS, onGoCocina }: AdminProps) {
           { id: 'config', label: 'CONFIGURACIÓN GENERAL' },
           { id: 'usuarios', label: 'USUARIOS Y PRIVILEGIOS' },
           { id: 'notificaciones', label: 'NOTIFICACIONES PUSH' },
-        ].map(t => (
-          <Button
-            key={t.id}
-            size="md"
-            variant="tab"
-            active={tab === t.id}
-            onClick={() => setTab(t.id as any)}
-            className="text-xs font-bold shrink-0"
-          >
-            {t.label}
-          </Button>
-        ))}
+        ].map(t => {
+          const isSel = tab === t.id
+          return (
+            <button
+              key={t.id}
+              type="button"
+              onClick={() => setTab(t.id as any)}
+              className={`px-3.5 py-2 rounded-xl font-black text-xs uppercase tracking-wide shrink-0 transition-all active:scale-95 border ${
+                isSel
+                  ? 'bg-blue-600 text-white border-blue-700 shadow-sm shadow-blue-500/20'
+                  : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+              }`}
+            >
+              {t.label}
+            </button>
+          )
+        })}
       </div>
 
-      {/* ── Tab Content ── */}
-      <div className="flex-1 flex flex-col min-h-0 bg-[#ECE9D8] swing-inset p-3 overflow-y-auto">
+      {/* ── Tab Content Panel ── */}
+      <div className="flex-1 flex flex-col min-h-0 bg-white rounded-2xl border border-slate-200 shadow-sm p-3 sm:p-4 overflow-y-auto">
         {loading ? (
-          <div className="h-full flex items-center justify-center font-bold text-gray-600">
-            Cargando información administrativa...
+          <div className="h-full flex items-center justify-center font-bold text-slate-500">
+            <div className="flex flex-col items-center gap-3">
+              <div className="w-8 h-8 border-3 border-blue-600 border-t-transparent rounded-full animate-spin" />
+              <span>Cargando información administrativa...</span>
+            </div>
           </div>
         ) : tab === 'dashboard' ? (
           /* 1. Dashboard Tab */
-          <div className="flex flex-col gap-3">
+          <div className="flex flex-col gap-4">
             {dashboardData?.resumen && (
-              <div className="grid grid-cols-4 gap-3">
-                <div className="bg-white p-3 swing-outset border">
-                  <span className="text-xs font-bold text-gray-600 block">VENTAS TOTALES (HOY):</span>
-                  <span className="text-2xl font-black font-mono text-[#0A246A]">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200">
+                  <span className="text-xs font-extrabold text-slate-500 uppercase tracking-wider block">
+                    VENTAS TOTALES (HOY):
+                  </span>
+                  <span className="text-3xl font-black font-mono text-blue-700 block mt-1">
                     {fmt(dashboardData.resumen.ventas)}
                   </span>
-                  <span className="text-[11px] text-gray-500 block mt-1">
+                  <span className="text-xs text-slate-500 font-medium block mt-1">
                     {dashboardData.resumen.cerradas} cuentas cobradas
                   </span>
                 </div>
 
-                <div className="bg-white p-3 swing-outset border">
-                  <span className="text-xs font-bold text-gray-600 block">TICKET PROMEDIO:</span>
-                  <span className="text-2xl font-black font-mono text-black">
+                <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200">
+                  <span className="text-xs font-extrabold text-slate-500 uppercase tracking-wider block">
+                    TICKET PROMEDIO:
+                  </span>
+                  <span className="text-3xl font-black font-mono text-slate-900 block mt-1">
                     {fmt(dashboardData.resumen.ticketPromedio)}
                   </span>
+                  <span className="text-xs text-slate-500 font-medium block mt-1">Por orden cerrada</span>
                 </div>
 
-                <div className="bg-white p-3 swing-outset border">
-                  <span className="text-xs font-bold text-gray-600 block">CUENTAS EN ESPERA:</span>
-                  <span className="text-2xl font-black font-mono text-amber-800">
+                <div className="bg-amber-50/60 p-4 rounded-2xl border border-amber-200">
+                  <span className="text-xs font-extrabold text-amber-800 uppercase tracking-wider block">
+                    CUENTAS EN ESPERA:
+                  </span>
+                  <span className="text-3xl font-black font-mono text-amber-700 block mt-1">
                     {dashboardData.resumen.abiertas}
                   </span>
-                  <span className="text-[11px] text-amber-700 block mt-1">
+                  <span className="text-xs text-amber-700 font-medium block mt-1">
                     Por cobrar: {fmt(dashboardData.resumen.por_cobrar)}
                   </span>
                 </div>
 
-                <div className="bg-white p-3 swing-outset border">
-                  <span className="text-xs font-bold text-gray-600 block">CANCELACIONES:</span>
-                  <span className="text-2xl font-black font-mono text-red-800">
+                <div className="bg-rose-50/60 p-4 rounded-2xl border border-rose-200">
+                  <span className="text-xs font-extrabold text-rose-800 uppercase tracking-wider block">
+                    CANCELACIONES:
+                  </span>
+                  <span className="text-3xl font-black font-mono text-rose-700 block mt-1">
                     {dashboardData.resumen.canceladas}
                   </span>
-                  <span className="text-[11px] text-red-700 block mt-1">
-                    Pérdida: {fmt(dashboardData.resumen.monto_cancelado)}
+                  <span className="text-xs text-rose-700 font-medium block mt-1">
+                    Monto: {fmt(dashboardData.resumen.monto_cancelado)}
                   </span>
                 </div>
               </div>
             )}
 
             {/* Breakdown tables */}
-            <div className="grid grid-cols-2 gap-3 mt-2">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mt-1">
               <Panel title="VENTAS POR MÉTODO DE PAGO">
-                <div className="p-3 bg-white swing-inset space-y-2">
+                <div className="p-3 bg-white space-y-2">
                   {(dashboardData?.ventasPorMetodo || []).map((m: any) => (
-                    <div key={m.metodo} className="flex justify-between items-center text-xs pb-1 border-b">
-                      <span className="font-bold uppercase text-gray-800">
+                    <div key={m.metodo} className="flex justify-between items-center text-xs pb-2 border-b border-slate-100 last:border-b-0">
+                      <span className="font-bold uppercase text-slate-800">
                         {m.metodo} ({m.pagos} pagos)
                       </span>
-                      <span className="font-mono font-black text-sm text-[#0A246A]">{fmt(m.total)}</span>
+                      <span className="font-mono font-black text-sm text-blue-700">{fmt(m.total)}</span>
                     </div>
                   ))}
                 </div>
               </Panel>
 
               <Panel title="TOP PRODUCTOS MÁS VENDIDOS">
-                <div className="p-3 bg-white swing-inset space-y-2">
+                <div className="p-3 bg-white space-y-2">
                   {(dashboardData?.topProductos || []).map((tp: any, idx: number) => (
-                    <div key={idx} className="flex justify-between items-center text-xs pb-1 border-b">
-                      <span className="font-bold text-gray-800">{tp.nombre}</span>
-                      <span className="font-mono font-black text-sm text-black">
+                    <div key={idx} className="flex justify-between items-center text-xs pb-2 border-b border-slate-100 last:border-b-0">
+                      <span className="font-bold text-slate-800">{tp.nombre}</span>
+                      <span className="font-mono font-black text-sm text-slate-900">
                         {tp.cantidad} vendidos
                       </span>
                     </div>
@@ -346,56 +363,55 @@ export function Admin({ usuario, onLogout, onGoPOS, onGoCocina }: AdminProps) {
           </div>
         ) : tab === 'pedidos' ? (
           /* 2. Pedidos Tab */
-          <div className="flex flex-col gap-2">
-            <span className="text-xs font-bold text-gray-700 uppercase">
+          <div className="flex flex-col gap-3">
+            <span className="text-xs font-extrabold text-slate-700 uppercase tracking-wider">
               Historial de Pedidos Recientes ({ordenes.length}):
             </span>
-            <div className="bg-white swing-inset overflow-x-auto">
+            <div className="border border-slate-200 rounded-xl overflow-x-auto shadow-2xs">
               <table className="w-full text-left text-xs border-collapse">
                 <thead>
-                  <tr className="bg-[#D4D0C8] border-b border-[#808080] font-bold">
-                    <th className="p-2">FOLIO</th>
-                    <th className="p-2">TIPO</th>
-                    <th className="p-2">ESTADO</th>
-                    <th className="p-2">TOTAL</th>
-                    <th className="p-2">PAGO</th>
-                    <th className="p-2">FECHA</th>
-                    <th className="p-2">ACCIONES</th>
+                  <tr className="bg-slate-100 border-b border-slate-200 font-black text-slate-600">
+                    <th className="p-3">FOLIO</th>
+                    <th className="p-3">TIPO</th>
+                    <th className="p-3">ESTADO</th>
+                    <th className="p-3">TOTAL</th>
+                    <th className="p-3">PAGO</th>
+                    <th className="p-3">FECHA</th>
+                    <th className="p-3">ACCIONES</th>
                   </tr>
                 </thead>
                 <tbody>
                   {ordenes.map(o => (
-                    <tr key={o.id} className="border-b border-gray-200 hover:bg-gray-50">
-                      <td className="p-2 font-mono font-black text-[#0A246A]">{o.folio}</td>
-                      <td className="p-2 uppercase font-bold">
+                    <tr key={o.id} className="border-b border-slate-100 hover:bg-slate-50 transition-colors">
+                      <td className="p-3 font-mono font-black text-blue-700">{o.folio}</td>
+                      <td className="p-3 uppercase font-bold text-slate-800">
                         {o.tipo} {o.mesa ? `· M:${o.mesa}` : ''}
                       </td>
-                      <td className="p-2">
+                      <td className="p-3">
                         <span
-                          className={`px-1.5 py-0.5 font-bold uppercase ${
+                          className={`px-2 py-0.5 rounded-full font-black uppercase text-[10px] border ${
                             o.estado === 'cerrada'
-                              ? 'bg-green-100 text-green-900'
+                              ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
                               : o.estado === 'abierta'
-                              ? 'bg-amber-100 text-amber-900'
-                              : 'bg-red-100 text-red-900'
+                              ? 'bg-amber-50 text-amber-700 border-amber-200'
+                              : 'bg-rose-50 text-rose-700 border-rose-200'
                           }`}
                         >
                           {o.estado}
                         </span>
                       </td>
-                      <td className="p-2 font-mono font-black">{fmt(o.total)}</td>
-                      <td className="p-2 uppercase font-bold">{o.metodoPago || 'PENDIENTE'}</td>
-                      <td className="p-2 text-gray-600 font-mono">{formatFecha(o.fechaCreacion)}</td>
-                      <td className="p-2">
+                      <td className="p-3 font-mono font-black text-slate-900">{fmt(o.total)}</td>
+                      <td className="p-3 uppercase font-bold text-slate-700">{o.metodoPago || 'PENDIENTE'}</td>
+                      <td className="p-3 text-slate-500 font-mono">{formatFecha(o.fechaCreacion)}</td>
+                      <td className="p-3">
                         {o.estado !== 'cancelada' && (
-                          <Button
-                            size="sm"
-                            variant="danger"
+                          <button
+                            type="button"
                             onClick={() => setCancelTarget(o)}
-                            className="text-[11px] py-1 px-2 font-bold"
+                            className="text-xs font-black py-1 px-2.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 active:scale-95 transition-all"
                           >
                             ANULAR
-                          </Button>
+                          </button>
                         )}
                       </td>
                     </tr>
@@ -408,11 +424,11 @@ export function Admin({ usuario, onLogout, onGoPOS, onGoCocina }: AdminProps) {
           /* 3. Menú Tab */
           <div className="flex flex-col gap-3">
             <div className="flex justify-between items-center">
-              <span className="text-sm font-black text-gray-800 uppercase">
+              <span className="text-xs font-extrabold text-slate-700 uppercase tracking-wider">
                 Catálogo de Productos del Menú ({catalogo?.productos.length || 0}):
               </span>
               <Button
-                size="md"
+                size="sm"
                 variant="success"
                 onClick={() =>
                   setEditingProduct({
@@ -423,36 +439,36 @@ export function Admin({ usuario, onLogout, onGoPOS, onGoCocina }: AdminProps) {
                     activo: true,
                   })
                 }
-                className="text-xs font-black"
+                className="text-xs font-black py-1.5 px-3"
               >
                 + AGREGAR NUEVO PRODUCTO
               </Button>
             </div>
 
-            <div className="bg-white swing-inset overflow-x-auto">
+            <div className="border border-slate-200 rounded-xl overflow-x-auto shadow-2xs">
               <table className="w-full text-left text-xs border-collapse">
                 <thead>
-                  <tr className="bg-[#D4D0C8] border-b border-[#808080] font-bold">
-                    <th className="p-2">ORDEN</th>
-                    <th className="p-2">NOMBRE</th>
-                    <th className="p-2">CATEGORÍA</th>
-                    <th className="p-2">PRECIO BASE</th>
-                    <th className="p-2">DESCRIPCIÓN</th>
-                    <th className="p-2">ESTADO</th>
-                    <th className="p-2">ACCIONES</th>
+                  <tr className="bg-slate-100 border-b border-slate-200 font-black text-slate-600">
+                    <th className="p-3">ORDEN</th>
+                    <th className="p-3">NOMBRE</th>
+                    <th className="p-3">CATEGORÍA</th>
+                    <th className="p-3">PRECIO BASE</th>
+                    <th className="p-3">DESCRIPCIÓN</th>
+                    <th className="p-3">ESTADO</th>
+                    <th className="p-3">ACCIONES</th>
                   </tr>
                 </thead>
                 <tbody>
                   {(catalogo?.productos || []).map(prod => {
                     const cat = catalogo?.categorias.find(c => c.id === prod.idCategoria)
                     return (
-                      <tr key={prod.id} className="border-b border-gray-200 hover:bg-gray-50">
-                        <td className="p-2">
+                      <tr key={prod.id} className="border-b border-slate-100 hover:bg-slate-50 transition-colors">
+                        <td className="p-3">
                           <div className="flex gap-1">
                             <button
                               type="button"
                               onClick={() => handleMoveProduct(prod, -1)}
-                              className="w-6 h-6 swing-button font-black text-xs"
+                              className="w-7 h-7 rounded-lg bg-slate-100 hover:bg-slate-200 font-black text-xs border border-slate-200 text-slate-700 active:scale-95"
                               title="Subir orden"
                             >
                               ▲
@@ -460,56 +476,58 @@ export function Admin({ usuario, onLogout, onGoPOS, onGoCocina }: AdminProps) {
                             <button
                               type="button"
                               onClick={() => handleMoveProduct(prod, 1)}
-                              className="w-6 h-6 swing-button font-black text-xs"
+                              className="w-7 h-7 rounded-lg bg-slate-100 hover:bg-slate-200 font-black text-xs border border-slate-200 text-slate-700 active:scale-95"
                               title="Bajar orden"
                             >
                               ▼
                             </button>
                           </div>
                         </td>
-                        <td className="p-2 font-black text-black">{prod.nombre}</td>
-                        <td className="p-2">
+                        <td className="p-3 font-black text-slate-900">{prod.nombre}</td>
+                        <td className="p-3">
                           <span
-                            className="px-2 py-0.5 text-[11px] font-bold text-white uppercase"
+                            className="px-2.5 py-0.5 text-[11px] font-black text-white uppercase rounded-md shadow-2xs"
                             style={{ backgroundColor: cat?.color || '#333' }}
                           >
                             {cat?.nombre || 'General'}
                           </span>
                         </td>
-                        <td className="p-2 font-mono font-black text-sm text-[#0A246A]">
+                        <td className="p-3 font-mono font-black text-sm text-blue-700">
                           {fmt(prod.precio)}
                         </td>
-                        <td className="p-2 text-gray-600 truncate max-w-xs">{prod.descripcion || '—'}</td>
-                        <td className="p-2">
+                        <td className="p-3 text-slate-500 truncate max-w-xs">{prod.descripcion || '—'}</td>
+                        <td className="p-3">
                           <span
-                            className={`px-1.5 py-0.5 font-bold uppercase text-[10px] ${
-                              prod.activo ? 'bg-green-100 text-green-900' : 'bg-red-100 text-red-900'
+                            className={`px-2 py-0.5 font-black uppercase text-[10px] rounded-full border ${
+                              prod.activo ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-rose-50 text-rose-700 border-rose-200'
                             }`}
                           >
                             {prod.activo ? 'ACTIVO' : 'INACTIVO'}
                           </span>
                         </td>
-                        <td className="p-2">
-                          <div className="flex gap-1">
-                            <Button
-                              size="sm"
-                              variant="default"
+                        <td className="p-3">
+                          <div className="flex gap-1.5">
+                            <button
+                              type="button"
                               onClick={() => setEditingProduct(prod)}
-                              className="text-[11px] py-1 px-2 font-bold"
+                              className="text-xs font-bold py-1 px-2.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200"
                             >
                               EDITAR
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant={prod.activo ? 'danger' : 'success'}
+                            </button>
+                            <button
+                              type="button"
                               onClick={async () => {
                                 await api.updateProducto(prod.id, { activo: !prod.activo })
                                 await reloadAll()
                               }}
-                              className="text-[11px] py-1 px-2 font-bold"
+                              className={`text-xs font-black py-1 px-2.5 rounded-lg border ${
+                                prod.activo
+                                  ? 'bg-rose-50 hover:bg-rose-100 text-rose-700 border-rose-200'
+                                  : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border-emerald-200'
+                              }`}
                             >
                               {prod.activo ? 'DESACTIVAR' : 'ACTIVAR'}
-                            </Button>
+                            </button>
                           </div>
                         </td>
                       </tr>
@@ -523,46 +541,45 @@ export function Admin({ usuario, onLogout, onGoPOS, onGoCocina }: AdminProps) {
           /* 4. Categorías Tab */
           <div className="flex flex-col gap-3">
             <div className="flex justify-between items-center">
-              <span className="text-sm font-black text-gray-800 uppercase">
+              <span className="text-xs font-extrabold text-slate-700 uppercase tracking-wider">
                 Categorías del Sistema:
               </span>
               <Button
-                size="md"
+                size="sm"
                 variant="success"
                 onClick={() => setEditingCategoria({ nombre: '', color: '#B71C1C', activo: true })}
-                className="text-xs font-black"
+                className="text-xs font-black py-1.5 px-3"
               >
                 + AGREGAR CATEGORÍA
               </Button>
             </div>
 
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
               {(catalogo?.categorias || []).map(cat => (
-                <div key={cat.id} className="bg-white p-3 swing-outset flex flex-col justify-between">
+                <div key={cat.id} className="bg-slate-50 p-4 rounded-2xl border border-slate-200 flex flex-col justify-between">
                   <div>
                     <div className="flex justify-between items-start mb-2">
-                      <span className="text-base font-black uppercase text-black">{cat.nombre}</span>
+                      <span className="text-base font-black uppercase text-slate-900">{cat.nombre}</span>
                       <span
-                        className="w-6 h-6 border-2 border-black"
+                        className="w-6 h-6 rounded-lg border border-slate-300 shadow-2xs"
                         style={{ backgroundColor: cat.color }}
                         title={cat.color}
                       />
                     </div>
-                    <span className="text-xs text-gray-600 block">Color hexadecimal: {cat.color}</span>
-                    <span className="text-xs text-gray-600 block">
+                    <span className="text-xs font-mono text-slate-500 block">Color: {cat.color}</span>
+                    <span className="text-xs text-slate-500 block mt-0.5">
                       Productos: {catalogo?.productos.filter(p => p.idCategoria === cat.id).length}
                     </span>
                   </div>
 
-                  <div className="flex justify-end gap-1 mt-3 pt-2 border-t border-gray-200">
-                    <Button
-                      size="sm"
-                      variant="default"
+                  <div className="flex justify-end gap-1 mt-3 pt-2.5 border-t border-slate-200">
+                    <button
+                      type="button"
                       onClick={() => setEditingCategoria(cat)}
-                      className="text-xs font-bold"
+                      className="text-xs font-bold py-1 px-3 rounded-lg bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 shadow-2xs"
                     >
                       EDITAR
-                    </Button>
+                    </button>
                   </div>
                 </div>
               ))}
@@ -570,44 +587,44 @@ export function Admin({ usuario, onLogout, onGoPOS, onGoCocina }: AdminProps) {
           </div>
         ) : tab === 'config' ? (
           /* 5. Configuración Tab */
-          <form onSubmit={handleSaveConfig} className="bg-white swing-inset p-4 max-w-xl space-y-3">
-            <span className="text-sm font-black text-[#0A246A] uppercase block border-b pb-2">
+          <form onSubmit={handleSaveConfig} className="bg-slate-50 p-5 rounded-2xl border border-slate-200 max-w-xl space-y-4">
+            <span className="text-sm font-black text-slate-900 uppercase block border-b border-slate-200 pb-2.5">
               Configuración de Precios e Impuestos:
             </span>
 
             <div>
-              <label className="block text-xs font-bold text-gray-700 uppercase mb-1">
+              <label className="block text-xs font-extrabold text-slate-700 uppercase tracking-wider mb-1">
                 Nombre del Negocio:
               </label>
               <input
                 type="text"
                 value={configForm.nombre_negocio || ''}
                 onChange={e => setConfigForm({ ...configForm, nombre_negocio: e.target.value })}
-                className="w-full h-10 px-2 text-sm bg-[#ECE9D8] swing-inset outline-none font-bold"
+                className="w-full h-11 px-3.5 text-sm bg-white rounded-xl border border-slate-300 outline-none focus:ring-2 focus:ring-blue-500 font-bold text-slate-900"
               />
             </div>
 
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs font-bold text-gray-700 uppercase mb-1">
+                <label className="block text-xs font-extrabold text-slate-700 uppercase tracking-wider mb-1">
                   Tasa de IVA (ej. 0.16 = 16%):
                 </label>
                 <input
                   type="text"
                   value={configForm.iva_tasa || ''}
                   onChange={e => setConfigForm({ ...configForm, iva_tasa: e.target.value })}
-                  className="w-full h-10 px-2 text-sm bg-[#ECE9D8] swing-inset outline-none font-bold font-mono"
+                  className="w-full h-11 px-3.5 text-sm bg-white rounded-xl border border-slate-300 outline-none focus:ring-2 focus:ring-blue-500 font-bold font-mono text-slate-900"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-gray-700 uppercase mb-1">
+                <label className="block text-xs font-extrabold text-slate-700 uppercase tracking-wider mb-1">
                   IVA Incluido en Precios de Menú:
                 </label>
                 <select
                   value={configForm.iva_incluido || 'true'}
                   onChange={e => setConfigForm({ ...configForm, iva_incluido: e.target.value })}
-                  className="w-full h-10 px-2 text-sm bg-[#ECE9D8] swing-inset outline-none font-bold"
+                  className="w-full h-11 px-3 text-sm bg-white rounded-xl border border-slate-300 outline-none focus:ring-2 focus:ring-blue-500 font-bold text-slate-900"
                 >
                   <option value="true">Sí (Precios ya tienen IVA)</option>
                   <option value="false">No (Se suma al cobrar)</option>
@@ -615,56 +632,56 @@ export function Admin({ usuario, onLogout, onGoPOS, onGoCocina }: AdminProps) {
               </div>
             </div>
 
-            <div className="pt-2 border-t border-gray-200">
-              <span className="text-xs font-black text-gray-800 uppercase block mb-2">
+            <div className="pt-2 border-t border-slate-200">
+              <span className="text-xs font-black text-slate-800 uppercase block mb-2">
                 Recargos de Tamaños y Masas ($):
               </span>
-              <div className="grid grid-cols-3 gap-2">
+              <div className="grid grid-cols-3 gap-2.5">
                 <div>
-                  <label className="text-[11px] font-bold text-gray-600 block">Pizza Chica:</label>
+                  <label className="text-[11px] font-bold text-slate-600 block mb-1">Pizza Chica:</label>
                   <input
                     type="number"
                     value={configForm.extra_chica || ''}
                     onChange={e => setConfigForm({ ...configForm, extra_chica: e.target.value })}
-                    className="w-full h-10 px-2 text-sm bg-[#ECE9D8] swing-inset outline-none font-mono font-bold"
+                    className="w-full h-10 px-3 text-sm bg-white rounded-xl border border-slate-300 outline-none font-mono font-bold text-slate-900"
                   />
                 </div>
                 <div>
-                  <label className="text-[11px] font-bold text-gray-600 block">Pizza Grande:</label>
+                  <label className="text-[11px] font-bold text-slate-600 block mb-1">Pizza Grande:</label>
                   <input
                     type="number"
                     value={configForm.extra_grande || ''}
                     onChange={e => setConfigForm({ ...configForm, extra_grande: e.target.value })}
-                    className="w-full h-10 px-2 text-sm bg-[#ECE9D8] swing-inset outline-none font-mono font-bold"
+                    className="w-full h-10 px-3 text-sm bg-white rounded-xl border border-slate-300 outline-none font-mono font-bold text-slate-900"
                   />
                 </div>
                 <div>
-                  <label className="text-[11px] font-bold text-gray-600 block">Orilla Rellena:</label>
+                  <label className="text-[11px] font-bold text-slate-600 block mb-1">Orilla Rellena:</label>
                   <input
                     type="number"
                     value={configForm.extra_orilla_rellena || ''}
                     onChange={e => setConfigForm({ ...configForm, extra_orilla_rellena: e.target.value })}
-                    className="w-full h-10 px-2 text-sm bg-[#ECE9D8] swing-inset outline-none font-mono font-bold"
+                    className="w-full h-10 px-3 text-sm bg-white rounded-xl border border-slate-300 outline-none font-mono font-bold text-slate-900"
                   />
                 </div>
               </div>
             </div>
 
-            <div className="pt-3 border-t border-gray-300 flex justify-end">
-              <Button type="submit" size="md" variant="success" className="font-black px-6">
+            <div className="pt-3 border-t border-slate-200 flex justify-end">
+              <Button type="submit" size="md" variant="success" className="font-black px-6 shadow-sm">
                 GUARDAR CONFIGURACIÓN
               </Button>
             </div>
           </form>
-        ) : (
+        ) : tab === 'usuarios' ? (
           /* 6. Usuarios Tab */
           <div className="flex flex-col gap-3">
             <div className="flex justify-between items-center">
-              <span className="text-sm font-black text-gray-800 uppercase">
+              <span className="text-xs font-extrabold text-slate-700 uppercase tracking-wider">
                 Personal del Sistema y Privilegios ({usuariosList.length}):
               </span>
               <Button
-                size="md"
+                size="sm"
                 variant="success"
                 onClick={() =>
                   setEditingUsuario({
@@ -675,28 +692,28 @@ export function Admin({ usuario, onLogout, onGoPOS, onGoCocina }: AdminProps) {
                     activo: true,
                   })
                 }
-                className="text-xs font-black"
+                className="text-xs font-black py-1.5 px-3"
               >
                 + REGISTRAR NUEVO USUARIO
               </Button>
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               {usuariosList.map(u => (
-                <div key={u.id} className="bg-white p-3 swing-outset flex flex-col justify-between">
+                <div key={u.id} className="bg-slate-50 p-4 rounded-2xl border border-slate-200 flex flex-col justify-between">
                   <div>
                     <div className="flex justify-between items-baseline mb-1">
-                      <span className="text-base font-black text-black">{u.nombre}</span>
-                      <span className="text-xs font-bold uppercase px-2 py-0.5 bg-[#0A246A] text-white">
+                      <span className="text-base font-black text-slate-900">{u.nombre}</span>
+                      <span className="text-xs font-black uppercase px-2.5 py-0.5 bg-blue-600 text-white rounded-md shadow-2xs">
                         {u.rol}
                       </span>
                     </div>
-                    <span className="text-xs font-mono text-gray-600 block">Usuario: {u.usuario}</span>
-                    <div className="mt-2 text-xs">
-                      <span className="font-bold text-gray-700 block mb-0.5">Permisos habilitados:</span>
+                    <span className="text-xs font-mono text-slate-500 block">Usuario: @{u.usuario}</span>
+                    <div className="mt-2.5 text-xs">
+                      <span className="font-extrabold text-slate-700 block mb-1">Permisos asignados:</span>
                       <div className="flex flex-wrap gap-1">
                         {(u.permisos || []).map((p: string) => (
-                          <span key={p} className="bg-gray-200 text-gray-800 text-[10px] font-bold px-1.5 py-0.5">
+                          <span key={p} className="bg-white border border-slate-200 text-slate-700 text-[10px] font-bold px-2 py-0.5 rounded-md">
                             {p}
                           </span>
                         ))}
@@ -704,42 +721,39 @@ export function Admin({ usuario, onLogout, onGoPOS, onGoCocina }: AdminProps) {
                     </div>
                   </div>
 
-                  <div className="flex justify-end gap-1 mt-3 pt-2 border-t border-gray-200">
-                    <Button
-                      size="sm"
-                      variant="default"
+                  <div className="flex justify-end gap-1 mt-3.5 pt-2.5 border-t border-slate-200">
+                    <button
+                      type="button"
                       onClick={() => {
                         setEditingUsuario(u)
                         setNewPasswordInput('')
                       }}
-                      className="text-xs font-bold"
+                      className="text-xs font-bold py-1 px-3 rounded-lg bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 shadow-2xs"
                     >
                       EDITAR PRIVILEGIOS
-                    </Button>
+                    </button>
                   </div>
                 </div>
               ))}
             </div>
           </div>
-        )}
-
-        {/* 7. Notificaciones Push y Alertas */}
-        {tab === 'notificaciones' && (
-          <div className="flex flex-col gap-4 max-w-2xl bg-white p-5 rounded-xl border border-gray-300 shadow-sm">
+        ) : (
+          /* 7. Notificaciones Push y Alertas */
+          <div className="flex flex-col gap-4 max-w-2xl bg-slate-50 p-5 rounded-2xl border border-slate-200 shadow-2xs">
             <div>
-              <span className="text-lg font-black text-black block mb-1">
+              <span className="text-base font-black text-slate-900 block mb-1">
                 NOTIFICACIONES PUSH & ALERTAS EN TIEMPO REAL
               </span>
-              <p className="text-xs text-gray-600">
+              <p className="text-xs text-slate-500">
                 Configura y prueba la recepción de notificaciones en el sistema operativo, móviles (Android / iOS) y tabletas.
               </p>
             </div>
 
             {/* Estado del permiso */}
-            <div className="p-4 bg-gray-50 border rounded-xl flex items-center justify-between">
+            <div className="p-3.5 bg-white border border-slate-200 rounded-xl flex items-center justify-between">
               <div>
-                <span className="text-xs font-bold text-gray-500 uppercase block">Estado del Permiso:</span>
-                <span className="text-sm font-black text-black">
+                <span className="text-xs font-extrabold text-slate-500 uppercase tracking-wider block">Estado del Permiso:</span>
+                <span className="text-sm font-black text-slate-900">
                   {notifications.getPermission() === 'granted'
                     ? 'Permitido en este dispositivo'
                     : notifications.getPermission() === 'denied'
@@ -755,20 +769,21 @@ export function Admin({ usuario, onLogout, onGoPOS, onGoCocina }: AdminProps) {
                   setNotifPermission(p)
                   setNotifMsg(p === 'granted' ? 'Permisos otorgados correctamente' : 'Permiso no otorgado')
                 }}
+                className="text-xs font-black py-1.5 px-3"
               >
                 SOLICITAR PERMISOS
               </Button>
             </div>
 
             {notifMsg && (
-              <div className="p-3 bg-blue-50 border border-blue-200 text-blue-900 text-xs font-bold rounded-lg">
+              <div className="p-3 bg-blue-50 border border-blue-200 text-blue-900 text-xs font-bold rounded-xl">
                 {notifMsg}
               </div>
             )}
 
             {/* Botones de prueba */}
             <div className="space-y-2">
-              <span className="text-xs font-black text-gray-700 uppercase block">
+              <span className="text-xs font-extrabold text-slate-700 uppercase tracking-wider block">
                 Disparar Pruebas de Notificación:
               </span>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
@@ -781,7 +796,7 @@ export function Admin({ usuario, onLogout, onGoPOS, onGoCocina }: AdminProps) {
                     })
                     setNotifMsg(ok ? 'Notificación enviada con éxito' : 'No se pudo enviar la notificación')
                   }}
-                  className="text-xs font-black py-3"
+                  className="text-xs font-black py-2.5"
                 >
                   PRUEBA GENERAL
                 </Button>
@@ -792,7 +807,7 @@ export function Admin({ usuario, onLogout, onGoPOS, onGoCocina }: AdminProps) {
                     await notifications.notifyNewKitchenOrder('#4099', 2, 'Pizza Familiar, Refresco')
                     setNotifMsg('Alerta sonora y push de cocina enviada.')
                   }}
-                  className="text-xs font-black py-3"
+                  className="text-xs font-black py-2.5"
                 >
                   ALERTA COCINA
                 </Button>
@@ -803,7 +818,7 @@ export function Admin({ usuario, onLogout, onGoPOS, onGoCocina }: AdminProps) {
                     await notifications.notifyOrderReady('#4099', 'domicilio', 'Juan Gómez')
                     setNotifMsg('Alerta de entrega enviada.')
                   }}
-                  className="text-xs font-black py-3"
+                  className="text-xs font-black py-2.5"
                 >
                   PEDIDO LISTO
                 </Button>
@@ -811,12 +826,12 @@ export function Admin({ usuario, onLogout, onGoPOS, onGoCocina }: AdminProps) {
             </div>
 
             {/* Guía móvil */}
-            <div className="p-4 bg-blue-50 border border-blue-200 rounded-xl text-xs space-y-2 text-blue-950">
-              <span className="font-black block uppercase">Guía para probar en Móviles y Tabletas:</span>
-              <ul className="list-disc list-inside space-y-1 text-blue-900">
+            <div className="p-3.5 bg-blue-50 border border-blue-200 rounded-xl text-xs space-y-1.5 text-blue-950">
+              <span className="font-extrabold block uppercase tracking-wider">Guía para móviles y tabletas:</span>
+              <ul className="list-disc list-inside space-y-1 text-blue-900 font-medium">
                 <li><strong>En Android (Chrome):</strong> Concede permisos al presionar &quot;SOLICITAR PERMISOS&quot;. Al pulsar prueba, vibrará y sonará la campana.</li>
-                <li><strong>En iPhone / iPad (Safari iOS 16.4+):</strong> Abre la página en Safari, presiona el botón Compartir y elige <em>&quot;Añadir a pantalla de inicio&quot;</em>. Al abrir la app desde el icono en tu pantalla, soporta notificaciones push completas.</li>
-                <li><strong>En Pantalla Dividida o Segundo Plano:</strong> Si cambias de pestaña o minimizas el navegador, las notificaciones seguirán apareciendo en la bandeja del sistema.</li>
+                <li><strong>En iPhone / iPad (Safari):</strong> En redes locales HTTP, el sistema despliega automáticamente el banner flotante interactivo con sonido de campana de cocina.</li>
+                <li><strong>En Pantalla Dividida o Segundo Plano:</strong> Si cambias de pestaña o minimizas el navegador, las notificaciones seguirán activas.</li>
               </ul>
             </div>
           </div>
@@ -832,9 +847,9 @@ export function Admin({ usuario, onLogout, onGoPOS, onGoCocina }: AdminProps) {
           onClose={() => setEditingProduct(null)}
           maxWidth="max-w-md"
         >
-          <form onSubmit={handleSaveProduct} className="flex flex-col gap-3">
+          <form onSubmit={handleSaveProduct} className="flex flex-col gap-3.5">
             <div>
-              <label className="block text-xs font-bold text-gray-700 uppercase mb-1">
+              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
                 Nombre del Producto:
               </label>
               <input
@@ -842,16 +857,16 @@ export function Admin({ usuario, onLogout, onGoPOS, onGoCocina }: AdminProps) {
                 required
                 value={editingProduct.nombre || ''}
                 onChange={e => setEditingProduct({ ...editingProduct, nombre: e.target.value })}
-                className="w-full h-10 px-2 text-sm bg-white swing-inset outline-none font-bold"
+                className="w-full h-11 px-3 text-sm bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none font-bold text-slate-900 transition"
               />
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-gray-700 uppercase mb-1">Categoría:</label>
+              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">Categoría:</label>
               <select
                 value={editingProduct.idCategoria || catalogo?.categorias[0]?.id}
                 onChange={e => setEditingProduct({ ...editingProduct, idCategoria: Number(e.target.value) })}
-                className="w-full h-10 px-2 text-sm bg-white swing-inset outline-none font-bold"
+                className="w-full h-11 px-3 text-sm bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none font-bold text-slate-900 transition"
               >
                 {catalogo?.categorias.map(c => (
                   <option key={c.id} value={c.id}>
@@ -862,7 +877,7 @@ export function Admin({ usuario, onLogout, onGoPOS, onGoCocina }: AdminProps) {
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-gray-700 uppercase mb-1">
+              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
                 Precio de Venta ($):
               </label>
               <input
@@ -871,27 +886,27 @@ export function Admin({ usuario, onLogout, onGoPOS, onGoCocina }: AdminProps) {
                 required
                 value={editingProduct.precio || ''}
                 onChange={e => setEditingProduct({ ...editingProduct, precio: parseFloat(e.target.value) })}
-                className="w-full h-10 px-2 text-lg font-mono font-bold bg-white swing-inset outline-none"
+                className="w-full h-11 px-3 text-base font-mono font-bold bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none text-slate-900 transition"
               />
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-gray-700 uppercase mb-1">
+              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
                 Descripción / Ingredientes:
               </label>
               <input
                 type="text"
                 value={editingProduct.descripcion || ''}
                 onChange={e => setEditingProduct({ ...editingProduct, descripcion: e.target.value })}
-                className="w-full h-10 px-2 text-sm bg-white swing-inset outline-none"
+                className="w-full h-11 px-3 text-sm bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none text-slate-900 transition"
               />
             </div>
 
-            <div className="flex justify-end gap-2 pt-2 border-t border-gray-300 mt-2">
-              <Button type="button" size="md" variant="default" onClick={() => setEditingProduct(null)}>
+            <div className="flex justify-end gap-2.5 pt-3 border-t border-slate-200 mt-2">
+              <Button type="button" size="md" variant="default" onClick={() => setEditingProduct(null)} className="rounded-xl px-4 font-bold text-xs">
                 CANCELAR
               </Button>
-              <Button type="submit" size="md" variant="success" className="font-black px-6">
+              <Button type="submit" size="md" variant="success" className="font-black px-6 rounded-xl shadow-sm">
                 GUARDAR
               </Button>
             </div>
@@ -907,9 +922,9 @@ export function Admin({ usuario, onLogout, onGoPOS, onGoCocina }: AdminProps) {
           onClose={() => setEditingCategoria(null)}
           maxWidth="max-w-md"
         >
-          <form onSubmit={handleSaveCategoria} className="flex flex-col gap-3">
+          <form onSubmit={handleSaveCategoria} className="flex flex-col gap-3.5">
             <div>
-              <label className="block text-xs font-bold text-gray-700 uppercase mb-1">
+              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
                 Nombre de Categoría:
               </label>
               <input
@@ -917,12 +932,12 @@ export function Admin({ usuario, onLogout, onGoPOS, onGoCocina }: AdminProps) {
                 required
                 value={editingCategoria.nombre || ''}
                 onChange={e => setEditingCategoria({ ...editingCategoria, nombre: e.target.value })}
-                className="w-full h-10 px-2 text-sm bg-white swing-inset outline-none font-bold"
+                className="w-full h-11 px-3 text-sm bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none font-bold text-slate-900 transition"
               />
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-gray-700 uppercase mb-1">
+              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
                 Color de Botón (Hexadecimal):
               </label>
               <div className="flex gap-2 items-center">
@@ -930,22 +945,22 @@ export function Admin({ usuario, onLogout, onGoPOS, onGoCocina }: AdminProps) {
                   type="color"
                   value={editingCategoria.color || '#B71C1C'}
                   onChange={e => setEditingCategoria({ ...editingCategoria, color: e.target.value })}
-                  className="w-12 h-10 border swing-inset cursor-pointer"
+                  className="w-12 h-11 border border-slate-300 rounded-xl cursor-pointer p-0.5 bg-white"
                 />
                 <input
                   type="text"
                   value={editingCategoria.color || '#B71C1C'}
                   onChange={e => setEditingCategoria({ ...editingCategoria, color: e.target.value })}
-                  className="flex-1 h-10 px-2 text-sm bg-white swing-inset font-mono font-bold"
+                  className="flex-1 h-11 px-3 text-sm bg-white border border-slate-300 rounded-xl font-mono font-bold text-slate-900"
                 />
               </div>
             </div>
 
-            <div className="flex justify-end gap-2 pt-2 border-t border-gray-300 mt-2">
-              <Button type="button" size="md" variant="default" onClick={() => setEditingCategoria(null)}>
+            <div className="flex justify-end gap-2.5 pt-3 border-t border-slate-200 mt-2">
+              <Button type="button" size="md" variant="default" onClick={() => setEditingCategoria(null)} className="rounded-xl px-4 font-bold text-xs">
                 CANCELAR
               </Button>
-              <Button type="submit" size="md" variant="success" className="font-black px-6">
+              <Button type="submit" size="md" variant="success" className="font-black px-6 rounded-xl shadow-sm">
                 GUARDAR
               </Button>
             </div>
@@ -961,38 +976,38 @@ export function Admin({ usuario, onLogout, onGoPOS, onGoCocina }: AdminProps) {
           onClose={() => setEditingUsuario(null)}
           maxWidth="max-w-lg"
         >
-          <form onSubmit={handleSaveUsuario} className="flex flex-col gap-3">
-            <div className="grid grid-cols-2 gap-2">
+          <form onSubmit={handleSaveUsuario} className="flex flex-col gap-3.5">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs font-bold text-gray-700 uppercase mb-1">Nombre Completo:</label>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">Nombre Completo:</label>
                 <input
                   type="text"
                   required
                   value={editingUsuario.nombre || ''}
                   onChange={e => setEditingUsuario({ ...editingUsuario, nombre: e.target.value })}
-                  className="w-full h-10 px-2 text-sm bg-white swing-inset font-bold outline-none"
+                  className="w-full h-11 px-3 text-sm bg-white border border-slate-300 rounded-xl font-bold outline-none text-slate-900"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-gray-700 uppercase mb-1">Nombre de Usuario:</label>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">Nombre de Usuario:</label>
                 <input
                   type="text"
                   required
                   value={editingUsuario.usuario || ''}
                   onChange={e => setEditingUsuario({ ...editingUsuario, usuario: e.target.value })}
-                  className="w-full h-10 px-2 text-sm bg-white swing-inset font-bold outline-none"
+                  className="w-full h-11 px-3 text-sm bg-white border border-slate-300 rounded-xl font-bold outline-none text-slate-900"
                 />
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs font-bold text-gray-700 uppercase mb-1">Rol Base:</label>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">Rol Base:</label>
                 <select
                   value={editingUsuario.rol || 'cajero'}
                   onChange={e => setEditingUsuario({ ...editingUsuario, rol: e.target.value })}
-                  className="w-full h-10 px-2 text-sm bg-white swing-inset font-bold outline-none"
+                  className="w-full h-11 px-3 text-sm bg-white border border-slate-300 rounded-xl font-bold outline-none text-slate-900"
                 >
                   <option value="admin">Administrador</option>
                   <option value="cajero">Cajero</option>
@@ -1002,7 +1017,7 @@ export function Admin({ usuario, onLogout, onGoPOS, onGoCocina }: AdminProps) {
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-gray-700 uppercase mb-1">
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
                   {editingUsuario.id ? 'Cambiar Contraseña:' : 'Contraseña Inicial:'}
                 </label>
                 <input
@@ -1010,42 +1025,44 @@ export function Admin({ usuario, onLogout, onGoPOS, onGoCocina }: AdminProps) {
                   placeholder={editingUsuario.id ? 'Dejar en blanco para no cambiar' : 'Mínimo 6 caracteres'}
                   value={newPasswordInput}
                   onChange={e => setNewPasswordInput(e.target.value)}
-                  className="w-full h-10 px-2 text-sm bg-white swing-inset outline-none"
+                  className="w-full h-11 px-3 text-sm bg-white border border-slate-300 rounded-xl outline-none text-slate-900"
                 />
               </div>
             </div>
 
             {/* Granular permissions checkboxes */}
             <div className="mt-2">
-              <span className="text-xs font-black text-gray-800 uppercase block mb-1">
+              <span className="text-xs font-black text-slate-800 uppercase tracking-wider block mb-1.5">
                 Permisos Específicos:
               </span>
-              <div className="grid grid-cols-2 gap-1.5 p-2 bg-white swing-inset max-h-48 overflow-y-auto">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 p-3 bg-white border border-slate-200 rounded-xl max-h-48 overflow-y-auto overscroll-contain">
                 {Object.entries(permisosMap).map(([pKey, pLabel]) => {
                   const has = (editingUsuario.permisos || []).includes(pKey)
                   return (
                     <label
                       key={pKey}
-                      className="flex items-center gap-2 p-1 hover:bg-gray-50 cursor-pointer text-xs font-bold"
+                      className={`flex items-center gap-2.5 p-2 rounded-lg cursor-pointer text-xs font-bold transition-colors ${
+                        has ? 'bg-blue-50 text-blue-950 border border-blue-200' : 'hover:bg-slate-50 text-slate-600 border border-transparent'
+                      }`}
                     >
                       <input
                         type="checkbox"
                         checked={has}
                         onChange={() => handleTogglePermiso(pKey)}
-                        className="w-4 h-4"
+                        className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500"
                       />
-                      <span className={has ? 'text-black' : 'text-gray-500'}>{pLabel}</span>
+                      <span>{pLabel}</span>
                     </label>
                   )
                 })}
               </div>
             </div>
 
-            <div className="flex justify-end gap-2 pt-2 border-t border-gray-300 mt-2">
-              <Button type="button" size="md" variant="default" onClick={() => setEditingUsuario(null)}>
+            <div className="flex justify-end gap-2.5 pt-3 border-t border-slate-200 mt-2">
+              <Button type="button" size="md" variant="default" onClick={() => setEditingUsuario(null)} className="rounded-xl px-4 font-bold text-xs">
                 CANCELAR
               </Button>
-              <Button type="submit" size="md" variant="success" className="font-black px-6">
+              <Button type="submit" size="md" variant="success" className="font-black px-6 rounded-xl shadow-sm">
                 GUARDAR USUARIO
               </Button>
             </div>

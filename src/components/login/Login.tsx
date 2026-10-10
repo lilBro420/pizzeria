@@ -163,7 +163,7 @@ export function Login({ onLogin }: LoginProps) {
   }
 
   return (
-    <div className="min-h-[100dvh] w-full flex items-center justify-center bg-gradient-to-br from-slate-900 via-slate-800 to-slate-950 p-3 sm:p-4 select-none overflow-y-auto">
+    <div className="min-h-[100dvh] w-full flex items-center justify-center bg-gradient-to-br from-slate-900 via-slate-800 to-slate-950 p-3 sm:p-4 touch-pan-y overflow-y-auto">
       <div className="w-full max-w-lg bg-white rounded-3xl shadow-2xl border border-slate-200/40 flex flex-col overflow-hidden animate-in fade-in duration-200">
         {/* Header */}
         <div className="bg-slate-900 text-white px-5 sm:px-6 py-4 sm:py-5 flex items-center justify-between font-bold border-b border-slate-800">
@@ -361,7 +361,7 @@ export function Login({ onLogin }: LoginProps) {
           onClose={() => setShowBiometricModal(false)}
           maxWidth="max-w-md"
         >
-          <div className="flex flex-col gap-4 select-none">
+          <div className="flex flex-col gap-4 touch-pan-y">
             {/* Selector de modo: Huella digital vs Código */}
             <div className="grid grid-cols-2 gap-2 p-1 bg-slate-200 rounded-xl">
               <button

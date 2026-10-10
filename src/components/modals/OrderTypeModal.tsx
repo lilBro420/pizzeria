@@ -99,7 +99,7 @@ export function OrderTypeModal({
 
   return (
     <Dialog title="DESTINO DEL PEDIDO" isOpen={true} onClose={onClose} maxWidth="max-w-2xl">
-      <div className="flex flex-col gap-4 select-none">
+      <div className="flex flex-col gap-4 touch-pan-y">
         {/* Type selection buttons */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
           {(

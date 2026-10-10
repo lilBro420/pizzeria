@@ -28,7 +28,7 @@ export function PendingAccountsModal({
 
   return (
     <Dialog title={`CUENTAS EN ESPERA (${pendientes.length} ACTIVAS)`} isOpen={true} onClose={onClose} maxWidth="max-w-5xl">
-      <div className="flex flex-col gap-3.5 h-[75vh] select-none">
+      <div className="flex flex-col gap-3.5 min-h-[50vh] max-h-[75vh] touch-pan-y">
         {/* Filters bar */}
         <div className="flex gap-2 shrink-0 overflow-x-auto pb-1">
           {[

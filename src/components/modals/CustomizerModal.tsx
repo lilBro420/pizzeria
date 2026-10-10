@@ -55,7 +55,7 @@ export function CustomizerModal({
 
   return (
     <Dialog title={`PERSONALIZAR: ${item.nombre.toUpperCase()}`} isOpen={true} onClose={onClose} maxWidth="max-w-xl">
-      <div className="flex flex-col gap-4 select-none">
+      <div className="flex flex-col gap-4 touch-pan-y">
         {/* Quantity selector */}
         <div className="bg-white rounded-xl border border-slate-200 p-3.5 flex items-center justify-between shadow-sm">
           <div>

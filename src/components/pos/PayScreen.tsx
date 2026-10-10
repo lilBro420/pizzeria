@@ -191,7 +191,7 @@ export function PayScreen({
     inputEnMXNCents === restanteCents
 
   return (
-    <div className="min-h-[100dvh] lg:h-full w-full flex flex-col bg-slate-100 p-2 sm:p-3 select-none overflow-y-auto lg:overflow-hidden font-sans">
+    <div className="min-h-[100dvh] lg:h-full w-full flex flex-col bg-slate-100 p-2 sm:p-3 touch-pan-y overflow-y-auto lg:overflow-hidden font-sans">
       {/* Title Bar */}
       <div className="bg-slate-900 text-white px-3 sm:px-4 py-2.5 rounded-xl flex items-center justify-between font-bold text-sm sm:text-base shadow-sm shrink-0 mb-2 border border-slate-800">
         <div className="flex items-center gap-2 sm:gap-3">

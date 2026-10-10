@@ -434,7 +434,7 @@ export function POS({ usuario, onLogout, onGoCocina, onGoAdmin }: POSProps) {
   })
 
   return (
-    <div className="min-h-[100dvh] lg:h-screen w-full flex flex-col bg-slate-100 p-2 sm:p-3 select-none overflow-y-auto lg:overflow-hidden font-sans">
+    <div className="min-h-[100dvh] lg:h-screen w-full flex flex-col bg-slate-100 p-2 sm:p-3 touch-pan-y overflow-y-auto lg:overflow-hidden font-sans">
       {/* ── Top Bar Moderna ── */}
       <header className="bg-slate-900 text-white px-3 sm:px-4 py-2 sm:py-2.5 rounded-2xl flex items-center justify-between shadow-md shrink-0 mb-2 border border-slate-800">
         <div className="flex items-center gap-2 sm:gap-3">

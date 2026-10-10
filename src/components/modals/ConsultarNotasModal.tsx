@@ -50,7 +50,7 @@ export function ConsultarNotasModal({ onClose, onCancelOrder }: ConsultarNotasMo
 
   return (
     <Dialog title="CONSULTA DE NOTAS Y CUENTAS" isOpen={true} onClose={onClose} maxWidth="max-w-5xl">
-      <div className="flex flex-col gap-3.5 h-[75vh] select-none">
+      <div className="flex flex-col gap-3.5 min-h-[50vh] max-h-[75vh] touch-pan-y">
         {/* Filters */}
         <div className="flex gap-2 items-center shrink-0">
           <input

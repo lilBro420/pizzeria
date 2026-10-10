@@ -75,7 +75,7 @@ export function TurnoModal({ usuario, onClose, onShiftClosed }: TurnoModalProps)
 
   return (
     <Dialog title="CONTROL DE TURNO Y CAJA" isOpen={true} onClose={onClose} maxWidth="max-w-2xl">
-      <div className="flex flex-col gap-3 select-none">
+      <div className="flex flex-col gap-3 touch-pan-y">
         {error && (
           <div className="bg-rose-50 border border-rose-200 text-rose-700 p-3 rounded-xl text-xs font-bold flex items-center gap-2">
             <AlertIcon className="w-4 h-4 text-rose-600 shrink-0" />
