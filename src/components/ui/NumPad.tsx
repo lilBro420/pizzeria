@@ -1,5 +1,6 @@
 import React from 'react'
 import { Button } from './Button'
+import { CheckIcon } from './Icons'
 
 interface NumPadProps {
   value: string
@@ -131,10 +132,11 @@ export function NumPad({
           <Button
             size="lg"
             variant="success"
-            className="text-lg font-black tracking-wide shadow-md shadow-emerald-500/20"
+            className="text-lg font-black tracking-wide shadow-md shadow-emerald-500/20 flex items-center justify-center gap-1.5"
             onClick={onEnter}
           >
-            ✓ {enterLabel}
+            <CheckIcon className="w-5 h-5 stroke-[3]" />
+            <span>{enterLabel}</span>
           </Button>
         )}
       </div>

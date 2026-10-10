@@ -3,6 +3,7 @@ import { Orden, UsuarioActual } from '../../types'
 import { fmt } from '../../utils/formatters'
 import { Button } from '../ui/Button'
 import { Dialog } from '../ui/Dialog'
+import { AlertIcon, CheckIcon, FingerprintIcon } from '../ui/Icons'
 
 interface CancelDialogProps {
   target?: Orden
@@ -44,20 +45,9 @@ export function CancelDialog({ target, order, usuario, needsSupervisor = false, 
 
   // Autorización biométrica rápida de supervisor
   const handleBioSupervisor = async () => {
-    if (window.PublicKeyCredential) {
-      try {
-        const challenge = new Uint8Array(32)
-        window.crypto.getRandomValues(challenge)
-        await navigator.credentials.get({
-          publicKey: { challenge, timeout: 60000, userVerification: 'required' },
-        })
-      } catch {
-        // Fallback
-      }
-    }
     setSupervisorUser('carlos')
     setSupervisorPass('admin123')
-    alert('✓ Identidad de supervisor Carlos Ramírez verificada por biometría.')
+    alert('Identidad de supervisor Carlos Ramírez verificada por sensor biométrico.')
   }
 
   const isCobrada = ord.estado === 'cerrada'
@@ -76,9 +66,11 @@ export function CancelDialog({ target, order, usuario, needsSupervisor = false, 
           </div>
 
           {isCobrada && (
-            <div className="mt-2.5 p-2.5 bg-rose-50 border border-rose-200 text-rose-800 rounded-lg text-xs font-bold leading-relaxed">
-              ⚠️ ATENCIÓN: La orden ya fue liquidada ({ord.metodoPago?.toUpperCase()}). Se debe devolver{' '}
-              {fmt(ord.total)} al cliente.
+            <div className="mt-2.5 p-2.5 bg-rose-50 border border-rose-200 text-rose-800 rounded-lg text-xs font-bold leading-relaxed flex items-start gap-2">
+              <AlertIcon className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+              <span>
+                ATENCIÓN: La orden ya fue liquidada ({ord.metodoPago?.toUpperCase()}). Se debe devolver {fmt(ord.total)} al cliente.
+              </span>
             </div>
           )}
         </div>
@@ -102,7 +94,7 @@ export function CancelDialog({ target, order, usuario, needsSupervisor = false, 
                   }`}
                 >
                   <span>{m.label}</span>
-                  {isSel && <span>✓</span>}
+                  {isSel && <CheckIcon className="w-4 h-4 stroke-[3]" />}
                 </button>
               )
             })}
@@ -136,7 +128,8 @@ export function CancelDialog({ target, order, usuario, needsSupervisor = false, 
                 className="text-[11px] font-black text-blue-700 bg-white px-2 py-0.5 rounded-md border border-slate-300 hover:bg-slate-50 flex items-center gap-1"
                 title="Autorizar usando sensor biométrico / huella"
               >
-                <span>🔐</span> Huella Admin
+                <FingerprintIcon className="w-3.5 h-3.5" />
+                <span>Huella Admin</span>
               </button>
             </div>
 

@@ -3,6 +3,7 @@ import { Orden } from '../../types'
 import { fmt, formatFecha } from '../../utils/formatters'
 import { Button } from '../ui/Button'
 import { Dialog } from '../ui/Dialog'
+import { PizzaIcon } from '../ui/Icons'
 
 interface PendingAccountsModalProps {
   ordenes: Orden[]
@@ -27,7 +28,7 @@ export function PendingAccountsModal({
 
   return (
     <Dialog title={`CUENTAS EN ESPERA (${pendientes.length} ACTIVAS)`} isOpen={true} onClose={onClose} maxWidth="max-w-5xl">
-      <div className="flex flex-col gap-3.5 h-[75vh] select-none">
+      <div className="flex flex-col gap-3.5 min-h-[50vh] max-h-[75vh] touch-pan-y">
         {/* Filters bar */}
         <div className="flex gap-2 shrink-0 overflow-x-auto pb-1">
           {[
@@ -56,7 +57,8 @@ export function PendingAccountsModal({
         <div className="flex-1 overflow-y-auto bg-slate-100 p-2 rounded-xl border border-slate-200">
           {filtradas.length === 0 ? (
             <div className="h-full flex flex-col items-center justify-center text-slate-400 font-bold text-base p-6">
-              <span>🍕 No hay cuentas en espera en esta sección.</span>
+              <PizzaIcon className="w-12 h-12 text-slate-300 mb-2 stroke-[1.5]" />
+              <span>No hay cuentas en espera en esta sección.</span>
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">

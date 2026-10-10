@@ -74,27 +74,30 @@ cocinaRouter.post(
 turnosRouter.use(authenticate)
 
 async function resumenTurno(q, turno) {
-  const rango = `fecha >= $2 AND fecha <= COALESCE($3, NOW())`
+  const rango = `p.fecha >= $1 AND p.fecha <= COALESCE($2, NOW())`
+  const rangoCanc = `timestamp_cancelacion >= $1 AND timestamp_cancelacion <= COALESCE($2, NOW())`
   const [metodos, canc, abiertas] = await Promise.all([
     q.query(
       `SELECT p.metodo, SUM(p.monto)::float8 AS total, COUNT(*)::int AS pagos, COALESCE(SUM(p.propina), 0)::float8 AS propinas
        FROM public.pagos p JOIN public.ordenes o ON o.id_orden = p.id_orden
-       WHERE p.id_empleado = $1 AND p.${rango} AND o.estado_actual = 'cerrada' GROUP BY p.metodo`,
-      [turno.id_empleado, turno.apertura, turno.cierre]
+       WHERE ${rango} AND o.estado_actual = 'cerrada' GROUP BY p.metodo`,
+      [turno.apertura, turno.cierre]
     ),
     q.query(
       `SELECT COUNT(*)::int AS n, COALESCE(SUM(monto_perdido), 0)::float8 AS monto
        FROM public.cancelacionesauditoria
-       WHERE id_empleado_cancelo = $1 AND timestamp_cancelacion >= $2 AND timestamp_cancelacion <= COALESCE($3, NOW())`,
-      [turno.id_empleado, turno.apertura, turno.cierre]
+       WHERE ${rangoCanc}`,
+      [turno.apertura, turno.cierre]
     ),
-    q.query(`SELECT COUNT(*)::int AS n, COALESCE(SUM(total), 0)::float8 AS monto FROM public.ordenes WHERE id_empleado = $1 AND estado_actual = 'abierta'`, [turno.id_empleado]),
+    q.query(`SELECT COUNT(*)::int AS n, COALESCE(SUM(total), 0)::float8 AS monto FROM public.ordenes WHERE estado_actual = 'abierta'`),
   ])
   const por = Object.fromEntries(metodos.rows.map(m => [m.metodo, m]))
   const efectivo = por.efectivo?.total ?? 0
   const fondo = parseFloat(turno.fondo_inicial)
   return {
     id: turno.id_turno,
+    idEmpleado: turno.id_empleado,
+    empleadoNombre: turno.empleado_nombre || null,
     apertura: turno.apertura,
     cierre: turno.cierre,
     fondoInicial: fondo,
@@ -112,7 +115,14 @@ async function resumenTurno(q, turno) {
 turnosRouter.get(
   '/actual',
   wrap(async (req, res) => {
-    const r = await pool.query('SELECT * FROM public.turnos WHERE id_empleado = $1 AND cierre IS NULL', [req.user.id])
+    const r = await pool.query(
+      `SELECT t.*, u.nombre AS empleado_nombre, u.rol AS empleado_rol
+       FROM public.turnos t
+       JOIN public.usuarios u ON u.id_usuario = t.id_empleado
+       WHERE t.cierre IS NULL
+       ORDER BY t.apertura DESC
+       LIMIT 1`
+    )
     res.json({ ok: true, turno: r.rows[0] ? await resumenTurno(pool, r.rows[0]) : null })
   })
 )
@@ -122,17 +132,38 @@ turnosRouter.post(
   requirePerm('turnos'),
   wrap(async (req, res) => {
     const { fondoInicial } = z.object({ fondoInicial: z.number().min(0).max(100000).default(0) }).parse(req.body)
-    const ya = await pool.query('SELECT 1 FROM public.turnos WHERE id_empleado = $1 AND cierre IS NULL', [req.user.id])
-    if (ya.rowCount) throw new HttpError(409, 'Ya tienes un turno abierto')
+    const ya = await pool.query(
+      `SELECT t.id_turno, u.nombre
+       FROM public.turnos t
+       JOIN public.usuarios u ON u.id_usuario = t.id_empleado
+       WHERE t.cierre IS NULL LIMIT 1`
+    )
+    if (ya.rowCount) {
+      throw new HttpError(409, `Ya existe un turno abierto en el sistema iniciado por ${ya.rows[0].nombre} (Turno #${ya.rows[0].id_turno})`)
+    }
     const r = await pool.query('INSERT INTO public.turnos (id_empleado, fondo_inicial) VALUES ($1, $2) RETURNING *', [req.user.id, fondoInicial])
-    res.status(201).json({ ok: true, turno: await resumenTurno(pool, r.rows[0]) })
+    const nuevo = await pool.query(
+      `SELECT t.*, u.nombre AS empleado_nombre, u.rol AS empleado_rol
+       FROM public.turnos t
+       JOIN public.usuarios u ON u.id_usuario = t.id_empleado
+       WHERE t.id_turno = $1`,
+      [r.rows[0].id_turno]
+    )
+    res.status(201).json({ ok: true, turno: await resumenTurno(pool, nuevo.rows[0]) })
   })
 )
 
 // Corte parcial (X): no cierra el turno
 turnosRouter.get('/corte', requirePerm('turnos'), wrap(async (req, res) => {
-  const r = await pool.query('SELECT * FROM public.turnos WHERE id_empleado = $1 AND cierre IS NULL', [req.user.id])
-  if (!r.rowCount) throw new HttpError(404, 'No tienes un turno abierto')
+  const r = await pool.query(
+    `SELECT t.*, u.nombre AS empleado_nombre, u.rol AS empleado_rol
+     FROM public.turnos t
+     JOIN public.usuarios u ON u.id_usuario = t.id_empleado
+     WHERE t.cierre IS NULL
+     ORDER BY t.apertura DESC
+     LIMIT 1`
+  )
+  if (!r.rowCount) throw new HttpError(404, 'No hay un turno abierto en el sistema')
   res.json({ ok: true, corte: await resumenTurno(pool, r.rows[0]) })
 }))
 
@@ -142,13 +173,22 @@ turnosRouter.post(
   wrap(async (req, res) => {
     const b = z.object({ efectivoContado: z.number().min(0).max(1000000), notas: z.string().max(500).nullish() }).parse(req.body)
     const corte = await tx(async c => {
+      const activo = await c.query('SELECT * FROM public.turnos WHERE cierre IS NULL ORDER BY apertura DESC LIMIT 1')
+      if (!activo.rowCount) throw new HttpError(404, 'No hay un turno abierto en el sistema')
+      const idTurno = activo.rows[0].id_turno
       const r = await c.query(
         `UPDATE public.turnos SET cierre = NOW(), efectivo_contado = $2, notas = $3
-         WHERE id_empleado = $1 AND cierre IS NULL RETURNING *`,
-        [req.user.id, b.efectivoContado, b.notas || null]
+         WHERE id_turno = $1 RETURNING *`,
+        [idTurno, b.efectivoContado, b.notas || null]
       )
-      if (!r.rowCount) throw new HttpError(404, 'No tienes un turno abierto')
-      return resumenTurno(c, r.rows[0])
+      const u = await c.query(
+        `SELECT t.*, u.nombre AS empleado_nombre, u.rol AS empleado_rol
+         FROM public.turnos t
+         JOIN public.usuarios u ON u.id_usuario = t.id_empleado
+         WHERE t.id_turno = $1`,
+        [idTurno]
+      )
+      return resumenTurno(c, u.rows[0])
     })
     res.json({ ok: true, corte })
   })

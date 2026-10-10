@@ -40,7 +40,7 @@ export function ExitMenuModal({
 
   return (
     <Dialog title="MENÚ DEL SISTEMA" isOpen={true} onClose={onClose} maxWidth="max-w-md">
-      <div className="flex flex-col gap-3.5 select-none">
+      <div className="flex flex-col gap-3.5 touch-pan-y">
         <div className="bg-slate-100 rounded-xl p-3 text-xs flex justify-between items-center border border-slate-200">
           <span className="font-bold text-slate-500">Usuario activo:</span>
           <span className="font-black text-blue-700 bg-white px-2.5 py-1 rounded-lg border border-slate-200">

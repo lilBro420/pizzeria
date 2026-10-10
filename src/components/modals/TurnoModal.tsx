@@ -4,6 +4,7 @@ import { api } from '../../services/api'
 import { fmt, formatFecha } from '../../utils/formatters'
 import { Button } from '../ui/Button'
 import { Dialog } from '../ui/Dialog'
+import { AlertIcon, CheckIcon } from '../ui/Icons'
 import { NumPad } from '../ui/NumPad'
 
 interface TurnoModalProps {
@@ -62,7 +63,7 @@ export function TurnoModal({ usuario, onClose, onShiftClosed }: TurnoModalProps)
         efectivoContado: parseFloat(efectivoContado) || 0,
         notas: notas.trim() || null,
       })
-      alert('✓ Turno cerrado correctamente y arqueo guardado.')
+      alert('Turno cerrado correctamente y arqueo guardado.')
       if (onShiftClosed) onShiftClosed()
       onClose()
     } catch (err: any) {
@@ -74,10 +75,10 @@ export function TurnoModal({ usuario, onClose, onShiftClosed }: TurnoModalProps)
 
   return (
     <Dialog title="CONTROL DE TURNO Y CAJA" isOpen={true} onClose={onClose} maxWidth="max-w-2xl">
-      <div className="flex flex-col gap-3 select-none">
+      <div className="flex flex-col gap-3 touch-pan-y">
         {error && (
           <div className="bg-rose-50 border border-rose-200 text-rose-700 p-3 rounded-xl text-xs font-bold flex items-center gap-2">
-            <span>⚠️</span>
+            <AlertIcon className="w-4 h-4 text-rose-600 shrink-0" />
             <span>{error}</span>
           </div>
         )}
@@ -88,8 +89,9 @@ export function TurnoModal({ usuario, onClose, onShiftClosed }: TurnoModalProps)
           /* Shift not opened yet */
           <div className="bg-white rounded-xl border border-slate-200 p-5 flex flex-col gap-4 shadow-sm">
             <div className="bg-amber-50 border border-amber-200 p-3.5 rounded-xl text-amber-900">
-              <span className="text-base font-black block mb-1">
-                ⚠️ NO HAY TURNO ABIERTO ACTUALMENTE
+              <span className="text-base font-black flex items-center gap-2 mb-1">
+                <AlertIcon className="w-5 h-5 text-amber-600 shrink-0" />
+                <span>NO HAY TURNO ABIERTO ACTUALMENTE</span>
               </span>
               <p className="text-xs text-amber-800">
                 Para comenzar a cobrar y procesar pedidos en caja con el usuario <b>{usuario.nombre}</b>, debes ingresar el fondo inicial de efectivo.
@@ -125,9 +127,10 @@ export function TurnoModal({ usuario, onClose, onShiftClosed }: TurnoModalProps)
                   <button
                     type="button"
                     onClick={handleAbrir}
-                    className="w-full py-3.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-base shadow-md shadow-emerald-500/20 active:scale-98 transition-all cursor-pointer"
+                    className="w-full py-3.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-base shadow-md shadow-emerald-500/20 active:scale-98 transition-all cursor-pointer flex items-center justify-center gap-2"
                   >
-                    ✓ ABRIR TURNO AHORA
+                    <CheckIcon className="w-5 h-5 stroke-[3]" />
+                    <span>ABRIR TURNO AHORA</span>
                   </button>
                 </div>
               </div>
@@ -140,10 +143,16 @@ export function TurnoModal({ usuario, onClose, onShiftClosed }: TurnoModalProps)
         ) : mode === 'view' ? (
           /* Active shift dashboard */
           <div className="flex flex-col gap-3">
-            <div className="bg-white rounded-xl border border-slate-200 p-4 grid grid-cols-3 gap-2 text-xs shadow-sm">
+            <div className="bg-white rounded-xl border border-slate-200 p-4 grid grid-cols-2 sm:grid-cols-4 gap-2.5 text-xs shadow-sm">
               <div>
                 <span className="text-slate-400 font-semibold block">Turno ID:</span>
                 <span className="font-mono font-black text-sm text-slate-900">#{turno.id}</span>
+              </div>
+              <div>
+                <span className="text-slate-400 font-semibold block">Responsable:</span>
+                <span className="font-bold text-slate-900 truncate block">
+                  {turno.empleadoNombre || usuario.nombre}
+                </span>
               </div>
               <div>
                 <span className="text-slate-400 font-semibold block">Apertura:</span>

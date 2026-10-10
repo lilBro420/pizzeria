@@ -159,6 +159,8 @@ export interface Orden {
 
 export interface ResumenTurno {
   id: number
+  idEmpleado?: number
+  empleadoNombre?: string | null
   apertura: string
   cierre: string | null
   fondoInicial: number
